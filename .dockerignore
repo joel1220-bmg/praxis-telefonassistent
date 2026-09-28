@@ -1,0 +1,6 @@
+node_modules
+dashboard/daten
+docker/.env
+test
+test-e2e
+vapi/assistant.local.json

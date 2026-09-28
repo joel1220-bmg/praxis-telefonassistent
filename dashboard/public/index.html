@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Praxis-Dashboard</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main id="login" class="login" hidden>
+    <form id="login-form" class="login-karte" autocomplete="on">
+      <h1>Praxis-Dashboard</h1>
+      <p class="leise">Anmeldung für das Praxisteam</p>
+      <label>Benutzername <input name="benutzer" autocomplete="username" required autofocus></label>
+      <label>Passwort <input name="passwort" type="password" autocomplete="current-password" required></label>
+      <p id="login-fehler" class="fehler" role="alert" hidden></p>
+      <button type="submit" class="primaer">Anmelden</button>
+      <p id="demo-hinweis" class="hinweis" hidden>Demo: Benutzer <b>demo</b>, Passwort <b>demo</b></p>
+    </form>
+  </main>
+
+  <div id="app" hidden>
+    <header class="kopf">
+      <div class="kopf-titel">
+        <span id="praxis-name">Praxis</span>
+        <span id="modus" class="chip"></span>
+      </div>
+      <nav class="reiter" role="tablist">
+        <button role="tab" data-ansicht="termine">Termine</button>
+        <button role="tab" data-ansicht="rueckrufe">Rückrufe <span id="rueckruf-zaehler" class="zaehler" hidden></span></button>
+        <button role="tab" data-ansicht="auslastung">Auslastung</button>
+        <button role="tab" data-ansicht="einstellungen">Einstellungen</button>
+        <button role="tab" data-ansicht="status">Status</button>
+      </nav>
+      <div class="kopf-benutzer">
+        <span id="benutzer-name" class="leise"></span>
+        <button id="abmelden" class="klein">Abmelden</button>
+      </div>
+    </header>
+
+    <p id="meldung" class="meldung" role="status" hidden></p>
+
+    <section id="ansicht-termine" class="ansicht" hidden>
+      <div class="leiste">
+        <button id="tag-zurueck" class="klein" aria-label="Vorheriger Tag">◀</button>
+        <button id="tag-heute" class="klein">Heute</button>
+        <button id="tag-vor" class="klein" aria-label="Nächster Tag">▶</button>
+        <input id="tag-wahl" type="date" aria-label="Datum wählen">
+        <h2 id="tag-titel"></h2>
+      </div>
+      <div id="termine-liste" class="liste"></div>
+    </section>
+
+    <section id="ansicht-rueckrufe" class="ansicht" hidden>
+      <div class="leiste">
+        <div class="umschalter" role="group" aria-label="Filter">
+          <button data-status="offen" class="klein aktiv">Offen</button>
+          <button data-status="erledigt" class="klein">Erledigt</button>
+        </div>
+      </div>
+      <div id="rueckrufe-liste" class="karten"></div>
+    </section>
+
+    <section id="ansicht-auslastung" class="ansicht" hidden>
+      <h2>Nächster freier Termin</h2>
+      <div id="naechste-freie" class="karten klein-karten"></div>
+      <h2>Auslastung der nächsten 14 Tage</h2>
+      <p class="leise">Anteil der Sprechzeit, der bereits belegt ist.</p>
+      <div id="auslastung-liste" class="balken-liste"></div>
+    </section>
+
+    <section id="ansicht-einstellungen" class="ansicht" hidden>
+      <p class="hinweis">Nur Anzeige. Änderungen in <code>src/config.js</code>, danach <code>npm run build</code> und Workflow neu importieren.</p>
+      <div id="einstellungen-inhalt" class="raster"></div>
+    </section>
+
+    <section id="ansicht-status" class="ansicht" hidden>
+      <div id="status-inhalt" class="raster"></div>
+    </section>
+  </div>
+</body>
+</html>

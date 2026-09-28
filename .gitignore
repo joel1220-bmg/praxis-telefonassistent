@@ -1,0 +1,11 @@
+node_modules/
+docker/.env
+vapi/assistant.local.json
+dashboard/daten/
+lokal/daten/
+lokal/n8n/node_modules/
+lokal/werkzeuge/
+.claude/agents/
+.claude/hooks/
+CLAUDE.local.md
+.dashboard/

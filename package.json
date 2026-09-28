@@ -1,0 +1,18 @@
+{
+  "name": "praxis-telefonassistent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "KI-Telefonassistent für Arztpraxen: Vapi + n8n + Google Calendar",
+  "scripts": {
+    "build": "node build.js",
+    "test": "node --test test/*.test.js",
+    "e2e": "node test-e2e/run.js",
+    "dashboard": "node dashboard/server.js"
+  },
+  "dependencies": {
+    "luxon": "^3.5.0"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}
