@@ -293,9 +293,13 @@ test('Anrufbericht: Ergebnisse aus Werkzeug-Antworten, fehlende Felder, Grenzen'
   assert.equal(ohneDauer.dauerSek, 150);
   assert.equal(ohneDauer.weitergeleitet, true);
 
-  // Leerer Bericht: keine Ausnahme, Startzeit = jetzt, alles 0/false
+  // Leerer Bericht: keine Ausnahme, Startzeit = jetzt, alles 0/false, Ersatz-ID statt Verwerfen
   const leer = lib.anrufBericht({ type: 'end-of-call-report' }, z(JETZT));
-  assert.deepEqual(leer, { id: '', start: '2026-09-28T05:00:00Z', dauerSek: 0, kostenUsd: 0, endeGrund: '', gebucht: false, abgesagt: false, rueckruf: false, weitergeleitet: false });
+  assert.deepEqual(leer, { id: 'ohne-id-2026-09-28T05:00:00Z-0', start: '2026-09-28T05:00:00Z', dauerSek: 0, kostenUsd: 0, endeGrund: '', gebucht: false, abgesagt: false, rueckruf: false, weitergeleitet: false });
+
+  // Millisekunden werden abgeschnitten (sonst stimmt der Textvergleich mit Tagesgrenzen nicht)
+  const ms = lib.anrufBericht(anrufBericht({ startedAt: '2026-09-28T22:00:00.500Z' }).message, z(JETZT));
+  assert.equal(ms.start, '2026-09-28T22:00:00Z');
 
   // Unsinnige Werte werden begrenzt
   const grenzen = lib.anrufBericht(anrufBericht({ durationSeconds: 99999, cost: -5 }).message, z(JETZT));

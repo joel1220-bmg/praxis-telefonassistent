@@ -19,7 +19,7 @@
 
 ## What happens during a call
 
-Interactive walkthrough (German): open [`docs/architektur.html`](docs/architektur.html) in a browser. It plays five flows step by step (booking, cancelling, callback, after the call, practice team) on a diagram of the real components.
+Interactive walkthrough (German): open [`docs/architektur.html`](docs/architektur.html) in a browser (no build, no external requests). It plays five flows step by step (booking, cancelling, callback, after the call, practice team) on a diagram of the real components.
 
 ```mermaid
 sequenceDiagram
@@ -239,7 +239,7 @@ What is built in:
 - The assistant can only find or cancel appointments it booked itself, and only with last name + date of birth.
 - At most 2 open appointments per person (configurable), to prevent abuse.
 - n8n does **not keep successful executions**: it only marks them for deletion at first, and the settings in `docker-compose.yml` delete them for good within about a minute. Errors are deleted after 72 hours. Recording is turned off in Vapi.
-- **Call reports (ROI view):** Vapi sends only the `end-of-call-report` to n8n (`serverMessages`). The report does contain the transcript and the caller's number, but n8n passes on only time, duration, cost, end reason and four yes/no outcomes, and doesn't store the execution. The dashboard keeps these numbers for 400 days (`roi.aufbewahrenTage`) and never sees names, numbers or content.
+- **Call reports (ROI view):** Vapi sends only the `end-of-call-report` to n8n (`serverMessages`). The report does contain the transcript and the caller's number, but n8n passes on only the Vapi call ID (to drop duplicates), time, duration, cost, end reason and four yes/no outcomes. Successful executions aren't stored; if the workflow fails, the error execution (with the full report) stays in n8n for up to 72 hours like any other error. The dashboard keeps these numbers for 400 days (`roi.aufbewahrenTage`) and never sees names, numbers or content.
 - Only minimal data is asked for: a keyword for the reason, not symptoms in detail.
 - **Dashboard:** personal logins (passwords as scrypt hashes), lockout after 5 failed attempts, session cookie HttpOnly/SameSite=Strict/Secure, CSRF protection, strict content security policy. Done callback requests are deleted automatically after 30 days (`rueckrufeAufbewahrenTage`). The internal endpoints are blocked from outside by Caddy. Recommended: make the dashboard reachable only from the practice network (see `docker/Caddyfile`).
 

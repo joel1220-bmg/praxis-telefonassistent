@@ -190,6 +190,9 @@ test('Anrufe: n8n-Endpunkt mit Token, Validierung, Duplikate', async () => {
     const anruf = { id: 'call-1', start: '2026-09-28T09:00:00+02:00', dauerSek: 120, kostenUsd: 0.2, endeGrund: 'customer-ended-call', gebucht: true };
     const auth = { 'content-type': 'application/json', authorization: `Bearer ${INTERN}` };
     assert.equal((await d.rufe('POST', '/intern/anruf', JSON.stringify(anruf), { 'content-type': 'application/json' })).status, 401);
+    // Gleiche Zeichenzahl wie der echte Header, aber mehr Bytes (ü): 401, nicht 500
+    const umlaut = `Bearer ${'ü'.repeat(INTERN.length)}`;
+    assert.equal((await d.rufe('POST', '/intern/anruf', JSON.stringify(anruf), { 'content-type': 'application/json', authorization: umlaut })).status, 401);
     assert.equal((await d.rufe('POST', '/intern/anruf', JSON.stringify({ ...anruf, id: '' }), auth)).status, 400);
     assert.equal((await d.rufe('POST', '/intern/anruf', JSON.stringify({ ...anruf, id: 'a b<script>' }), auth)).status, 400);
     assert.equal((await d.rufe('POST', '/intern/anruf', JSON.stringify({ ...anruf, start: 'gestern' }), auth)).status, 400);
@@ -199,11 +202,12 @@ test('Anrufe: n8n-Endpunkt mit Token, Validierung, Duplikate', async () => {
     const doppelt = await d.rufe('POST', '/intern/anruf', JSON.stringify(anruf), auth);
     assert.equal(doppelt.status, 200, 'Vapi schickt Berichte evtl. doppelt');
     assert.equal(doppelt.json.neu, false);
-    await d.rufe('POST', '/intern/anruf', JSON.stringify({ id: 'call-2', start: '2026-09-28T10:00:00Z', dauerSek: 99999, kostenUsd: 'viel', gebucht: 'ja' }), auth);
+    await d.rufe('POST', '/intern/anruf', JSON.stringify({ id: 'call-2', start: '2026-09-28T10:00:00.750Z', dauerSek: 99999, kostenUsd: 'viel', gebucht: 'ja' }), auth);
     const gespeichert = d.anrufe.zeitraum('2026-01-01', '2027-01-01');
     assert.equal(gespeichert.length, 2);
     assert.equal(gespeichert[0].start, '2026-09-28T07:00:00Z', 'als UTC gespeichert');
     assert.deepEqual([gespeichert[1].dauerSek, gespeichert[1].kostenUsd, gespeichert[1].gebucht], [7200, 0, false], 'begrenzt, nur echtes true zählt');
+    assert.equal(gespeichert[1].start, '2026-09-28T10:00:00Z', 'Millisekunden abgeschnitten');
     assert.equal(d.anrufe.aufraeumen('2026-09-28T08:00:00Z'), 1, 'ältere als die Grenze werden gelöscht');
   } finally { await d.schliessen(); }
 });

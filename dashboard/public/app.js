@@ -227,7 +227,7 @@ async function ladeAuslastung() {
 const zahl = (x, stellen = 0) => new Intl.NumberFormat('de-DE', { minimumFractionDigits: stellen, maximumFractionDigits: stellen }).format(x);
 const euro = (x) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(x);
 const dauer = (sek) => `${Math.floor(sek / 60)}:${String(sek % 60).padStart(2, '0')} Min.`;
-const RASTER_STUNDEN = Array.from({ length: 17 }, (_, i) => i + 6); // 6 bis 22 Uhr
+const RASTER_STUNDEN = Array.from({ length: 24 }, (_, i) => i); // ganzer Tag: nachts zeigt, was sonst verloren ginge
 const WOCHENTAG_KURZ = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
 document.querySelectorAll('#ansicht-wirkung .umschalter button').forEach((b) => b.addEventListener('click', () => {
@@ -252,7 +252,7 @@ async function ladeWirkung() {
     kachel('Termine gebucht', zahl(k.gebucht), `${zahl(k.abgesagt)} abgesagt · ${zahl(k.rueckrufe)} Rückrufe · ${zahl(k.weitergeleitet)} weitergeleitet`),
     kachel('Gesparte Personalzeit', `${zahl(k.personalStunden, 1)} Std.`, `Ø Gespräch ${dauer(k.durchschnittSekunden)}`),
     kachel('Ersparnis', euro(k.ersparnisEuro), `KI-Kosten ${euro(k.kiKostenEuro)}`),
-    kachel('Netto-Nutzen', euro(k.nettoEuro), k.roiFaktor ? `${zahl(k.roiFaktor, 1)}-fach der KI-Kosten` : 'noch keine Kosten', k.nettoEuro >= 0 ? 'positiv' : 'negativ'),
+    kachel('Netto-Nutzen', euro(k.nettoEuro), k.roiFaktor !== null ? `${zahl(k.roiFaktor, 1)}-fach der KI-Kosten` : 'noch keine Kosten', k.nettoEuro >= 0 ? 'positiv' : 'negativ'),
   );
 
   const max = Math.max(1, ...r.proTag.map((t) => t.drinnen + t.draussen));
@@ -268,7 +268,7 @@ async function ladeWirkung() {
 
   const rasterMax = Math.max(1, ...r.stundenRaster.flat());
   $('#wirkung-raster').replaceChildren(el('table', { class: 'heat' },
-    el('thead', {}, el('tr', {}, el('th', {}), RASTER_STUNDEN.map((h) => el('th', { scope: 'col' }, h % 2 ? '' : String(h))))),
+    el('thead', {}, el('tr', {}, el('th', {}), RASTER_STUNDEN.map((h) => el('th', { scope: 'col' }, h % 3 ? '' : String(h))))),
     el('tbody', {}, r.stundenRaster.map((zeile, w) => el('tr', {},
       el('th', { scope: 'row' }, WOCHENTAG_KURZ[w]),
       RASTER_STUNDEN.map((h) => {

@@ -10,7 +10,7 @@ const crypto = require('crypto');
 const { spawn, execFileSync } = require('child_process');
 const { erstelleGoogleAttrappe, erstelleSmtpAttrappe } = require('../test-e2e/attrappen');
 const { erstelleDashboard } = require('../dashboard/server');
-const { RueckrufSpeicher } = require('../dashboard/speicher');
+const { RueckrufSpeicher, AnrufSpeicher } = require('../dashboard/speicher');
 const { Benutzer } = require('../dashboard/benutzer');
 const { N8nKalender } = require('../dashboard/kalender');
 
@@ -239,6 +239,7 @@ async function main() {
     config, modus: 'live', benutzer,
     kalender: new N8nKalender({ url: `http://127.0.0.1:${PORT.n8n}/webhook/praxis-dashboard`, token: g.dashboardApi }),
     speicher: new RueckrufSpeicher(path.join(DATEN, 'rueckrufe.sqlite')),
+    anrufe: new AnrufSpeicher(path.join(DATEN, 'anrufe.sqlite')),
     internToken: g.dashboardIntern, n8nKonfiguriert: true, protokoll: log,
   });
   await lauschen(dashboard, PORT.dashboard, 'Dashboard');

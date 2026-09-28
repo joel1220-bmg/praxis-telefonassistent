@@ -579,10 +579,14 @@ function makeLib(DateTime) {
         if (m.name === werkzeug && muster.test(ergebnis)) ergebnisse[feld] = true;
       }
     }
+    const startIso = isoOhneMs((start || jetzt.toUTC()).startOf('second'));
+    const dauerSek = Number.isFinite(dauer) ? Math.round(Math.min(Math.max(dauer, 0), 7200)) : 0;
+    const id = text(call.id || n.callId, 100);
     return {
-      id: text(call.id || n.callId, 100),
-      start: isoOhneMs(start || jetzt.toUTC()),
-      dauerSek: Number.isFinite(dauer) ? Math.round(Math.min(Math.max(dauer, 0), 7200)) : 0,
+      // Ohne Vapi-ID eine Ersatz-ID aus Start und Dauer, damit der Bericht nicht verworfen wird und Duplikate erkennbar bleiben.
+      id: /^[A-Za-z0-9_\-.:]{1,100}$/.test(id) ? id : `ohne-id-${startIso}-${dauerSek}`,
+      start: startIso,
+      dauerSek,
       kostenUsd: Number.isFinite(kosten) ? Math.round(Math.min(Math.max(kosten, 0), 100) * 10000) / 10000 : 0,
       endeGrund,
       ...ergebnisse,

@@ -315,9 +315,10 @@ function erstelleDashboard(opt) {
 
   // Nur n8n (im Docker-Netz) kennt den Intern-Token; von außen blockt Caddy /intern/* zusätzlich.
   function internPruefen(req) {
-    const auth = String(req.headers.authorization || '');
-    const erwartet = `Bearer ${opt.internToken || ''}`;
-    const ok = opt.internToken && auth.length === erwartet.length && crypto.timingSafeEqual(Buffer.from(auth), Buffer.from(erwartet));
+    const auth = Buffer.from(String(req.headers.authorization || ''));
+    const erwartet = Buffer.from(`Bearer ${opt.internToken || ''}`);
+    // Längen in Bytes vergleichen: timingSafeEqual wirft sonst bei Nicht-ASCII-Zeichen (→ 500 statt 401).
+    const ok = opt.internToken && auth.length === erwartet.length && crypto.timingSafeEqual(auth, erwartet);
     if (!ok) throw new HttpFehler(401, 'Nicht berechtigt');
   }
 
@@ -331,7 +332,8 @@ function erstelleDashboard(opt) {
     const zahl = (wert, max) => (Number.isFinite(Number(wert)) ? Math.min(Math.max(Number(wert), 0), max) : 0);
     const neu = anrufe.hinzufuegen({
       id,
-      start: start.toUTC().toISO({ suppressMilliseconds: true }),
+      // Auf volle Sekunden, damit der Textvergleich mit den Zeitraum-Grenzen ("…:00Z") stimmt.
+      start: start.toUTC().startOf('second').toISO({ suppressMilliseconds: true }),
       dauerSek: Math.round(zahl(b.dauerSek, 7200)),
       kostenUsd: zahl(b.kostenUsd, 100),
       endeGrund: lib.text(b.endeGrund, 80),
