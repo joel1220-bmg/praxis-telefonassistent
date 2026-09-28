@@ -9,17 +9,15 @@
 
 {$N8N_DOMAIN} {
 	import sicherheit
-	# The dashboard API is only called by the dashboard inside the Docker network, never from outside.
-	respond /webhook/praxis-dashboard* 403
-	respond /webhook-test/praxis-dashboard* 403
-	# Recommended: make the n8n editor reachable only from the practice network (webhooks stay public).
-	# Replace 203.0.113.10 with the practice's public IP and remove the # signs.
-	# @editor {
-	# 	not path /webhook/*
-	# 	not remote_ip 203.0.113.10
-	# }
-	# respond @editor 403
-	reverse_proxy n8n:5678
+	# From outside only the Vapi webhook gets through. The editor, REST API and dashboard API stay closed;
+	# the editor is reached through an SSH tunnel (see README, "n8n-Editor").
+	@vapi path /webhook/vapi-praxis
+	handle @vapi {
+		reverse_proxy n8n:5678
+	}
+	handle {
+		respond 403
+	}
 }
 
 {$DASHBOARD_DOMAIN} {
