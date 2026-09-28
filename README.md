@@ -9,6 +9,8 @@
 
 **Status (09/2026):** running as a **live demo** on my own Hetzner server: a Vapi phone number, self-hosted n8n and a real Google Calendar. It holds no real patient data and is not yet used by a practice. See [what runs live](#what-runs-live) and [limitations](#limitations).
 
+**Contents:** [What happens during a call](#what-happens-during-a-call) · [Engineering highlights](#engineering-highlights) · [What runs live](#what-runs-live) · [Features](#features) · [Folder structure](#folder-structure) · [Try it yourself](#try-the-dashboard-right-away-demo-data) · [Setup](#setup) · [Tests](#tests) · [Security & data protection](#security--data-protection-please-read) · [Limitations](#limitations)
+
 ![Dashboard, tab "Wirkung": calls handled, staff time and euros saved, AI cost, calls per day and busy hours](docs/bilder/dashboard-wirkung.png)
 
 | Appointments | Callback requests | Utilisation |
@@ -83,39 +85,31 @@ Patients call the practice number. A German-speaking AI assistant picks up and c
 
 The practice team gets a **web dashboard** with appointments, callback requests, utilisation for the next 14 days, the impact of the assistant ("Wirkung": calls, outcomes, staff time and euros saved versus AI cost), settings and system status.
 
-```
-Caller ──phone──▶ Vapi (speech recognition, voice, LLM)
-                     │  tool call (HTTPS + bearer token)
-                     ▼
-                  n8n webhook ──▶ Google Calendar (freeBusy / events)
-                     │        └─▶ SMTP e-mail to the front desk
-                     ▼
-                  answer back to Vapi ──▶ assistant speaks
-
-Practice team ──browser──▶ Dashboard (login) ──▶ n8n "Dashboard API" ──▶ Google Calendar
-                              ▲
-                              └── callback requests from the phone workflow (stored in SQLite)
-```
+How the parts connect is shown in the [call diagram](#what-happens-during-a-call) above and, step by step, in [`docs/architektur.html`](docs/architektur.html).
 
 ## Folder structure
 
 | Path | Contents |
 |---|---|
 | `src/config.js` | **Your practice data**: opening hours, appointment types, holidays, vacation, calendar, e-mail |
-| `src/lib.js` | All the logic (slots, validation, name matching), covered by tests |
+| `src/lib.js` | All the logic (slots, validation, name matching, call report), covered by tests |
 | `vapi/system-prompt.de.md` | Conversation rules for the assistant (German) |
 | `build.js` | Generates the files below from the files above |
 | `n8n/praxis-telefonassistent.workflow.json` | Workflow for the phone tools (generated, don't edit by hand) |
 | `n8n/praxis-dashboard-api.workflow.json` | Workflow the dashboard uses to read the calendar and cancel appointments (generated) |
-| `dashboard/` | Web dashboard for the practice team (Node, no extra dependencies) |
+| `dashboard/` | Web dashboard for the practice team (Node, no extra dependencies); `roi.js` computes the "Wirkung" numbers |
 | `vapi/assistant.json` | Vapi assistant with placeholders (generated) |
 | `vapi/einrichten.js` | Creates or updates the assistant in Vapi |
 | `docker/` | Hosting: n8n + task runner + Postgres + dashboard + Caddy (HTTPS) |
 | `test/`, `test-e2e/` | Unit tests and the end-to-end test against a real n8n |
+| `docs/` | Interactive architecture page and the screenshots used here |
+| `SPEC.md` | Goals and testable acceptance criteria for each part |
 
 After every change to `src/` or the prompt: `npm run build`, then re-import the workflows, run `vapi/einrichten.js` again and restart the dashboard.
 
 ## Try the dashboard right away (demo data)
+
+Needs only Node 22.13 or newer, no accounts.
 
 ```bash
 npm install
