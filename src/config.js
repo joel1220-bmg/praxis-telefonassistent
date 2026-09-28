@@ -3,8 +3,9 @@ module.exports = {
   praxisName: 'Hausarztpraxis Dr. Muster',
   zeitzone: 'Europe/Berlin',
 
-  // Google-Kalender, in den gebucht wird ("primary" = Hauptkalender des verbundenen Kontos).
-  kalenderId: 'primary',
+  // Google-Kalender, in den gebucht wird. Mit Service-Account die ID des freigegebenen Kalenders
+  // (Kalendereinstellungen → "Kalender integrieren"), nicht "primary": das wäre der leere Kalender des Service-Accounts.
+  kalenderId: 'fd4edadb97396f67f641e664c1e3889bb23bd1207c3043a66a69e51f54080449@group.calendar.google.com',
   googleApiBasis: 'https://www.googleapis.com',
 
   // Erster Satz am Telefon. Danach folgen automatisch der KI-Hinweis (Pflicht, EU AI Act) und der Notfall-Hinweis.

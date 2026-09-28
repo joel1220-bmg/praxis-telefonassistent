@@ -103,7 +103,7 @@ Open `https://<your-domain>`, create the owner account and **turn on two-factor 
 
 ### 3. Create the credentials in n8n
 1. **Header Auth** named `Vapi Bearer-Token`: name `Authorization`, value `Bearer <long random token>`.
-2. **Google Calendar OAuth2 API** named `Google Kalender Praxis`: create an OAuth client in Google Cloud (enable the Calendar API) with the redirect URL shown in n8n. Use a **Google Workspace** account with a data processing agreement, not a private Gmail account.
+2. **Google Service Account API** named `Google Service Account Praxis`: in Google Cloud, enable the Calendar API and create a service account (no roles) with a JSON key. Share the practice calendar with the service account's e-mail ("Make changes and see all event details") and put that calendar's ID into `kalenderId` in `src/config.js` (not `primary`). In n8n, enter the service account e-mail and the private key from the JSON file; never commit the key. Use a **Google Workspace** account with a data processing agreement, not a private Gmail account. (Tests and `lokal/start.js` build with `--google-auth oauth` and use the credential `Google Kalender Praxis` against the fake calendar.)
 3. **SMTP** named `SMTP Praxis`: the practice's mail server, with TLS.
 4. **Header Auth** named `Dashboard API-Token`: name `Authorization`, value `Bearer <DASHBOARD_API_TOKEN from .env>`.
 5. **Header Auth** named `Dashboard Intern-Token`: name `Authorization`, value `Bearer <DASHBOARD_INTERN_TOKEN from .env>`.
