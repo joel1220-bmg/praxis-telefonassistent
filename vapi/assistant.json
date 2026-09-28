@@ -1,6 +1,6 @@
 {
   "name": "Praxis-Telefonassistent",
-  "firstMessage": "Moin, Apo Red am Start! Ich bin übrigens eine künstliche Intelligenz. Bei einem Notfall bitte auflegen und die 112 wählen. Was kann ich für Sie tun?",
+  "firstMessage": "Hausarztpraxis Dr. Muster, guten Tag! Ich bin übrigens eine künstliche Intelligenz. Bei einem Notfall bitte auflegen und die 112 wählen. Was kann ich für Sie tun?",
   "model": {
     "provider": "anthropic",
     "model": "claude-sonnet-5",

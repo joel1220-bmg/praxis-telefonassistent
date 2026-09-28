@@ -9,7 +9,7 @@ module.exports = {
   googleApiBasis: 'https://www.googleapis.com',
 
   // Erster Satz am Telefon. Danach folgen automatisch der KI-Hinweis (Pflicht, EU AI Act) und der Notfall-Hinweis.
-  begruessung: 'Moin, Apo Red am Start!',
+  begruessung: 'Hausarztpraxis Dr. Muster, guten Tag!',
 
   // Allgemeine Auskünfte, die der Assistent geben darf.
   praxisInfos: [

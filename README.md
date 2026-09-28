@@ -1,5 +1,70 @@
 # AI phone assistant for a doctor's office
 
+[![Tests](https://github.com/joel1220-bmg/praxis-telefonassistent/actions/workflows/tests.yml/badge.svg)](https://github.com/joel1220-bmg/praxis-telefonassistent/actions/workflows/tests.yml)
+![n8n 2.40 self-hosted](https://img.shields.io/badge/n8n-2.40%20self--hosted-EA4B71)
+![Vapi voice agent](https://img.shields.io/badge/voice-Vapi-5B5BD6)
+![Hetzner + Docker](https://img.shields.io/badge/hosting-Hetzner%20%2B%20Docker-D50C2D)
+
+> **Kurz auf Deutsch:** Ein deutschsprachiger KI-Telefonassistent für Arztpraxen. Patientinnen und Patienten rufen an, der Voice Agent (Vapi) sucht freie Termine, bucht, sagt ab und nimmt Rückrufwünsche auf. Die Logik läuft als n8n-Workflows auf einem **selbst gehosteten Hetzner-Server** (Docker, Caddy, Postgres), Google Calendar ist die Quelle der Wahrheit. Dazu gibt es ein Web-Dashboard fürs Praxisteam. Die Kernlogik ist mit Unit-Tests und einem End-to-End-Test gegen ein echtes n8n abgesichert.
+
+**Status (09/2026):** running as a **live demo** on my own Hetzner server: a Vapi phone number, self-hosted n8n and a real Google Calendar. It holds no real patient data and is not yet used by a practice. See [what runs live](#what-runs-live) and [limitations](#limitations).
+
+| Appointments | Callback requests | Utilisation |
+|---|---|---|
+| ![Dashboard: appointments of the day](docs/bilder/dashboard-termine.png) | ![Dashboard: callback requests](docs/bilder/dashboard-rueckrufe.png) | ![Dashboard: utilisation for 14 days](docs/bilder/dashboard-auslastung.png) |
+
+*Staff dashboard in demo mode (sample data only). "Telefonassistent" marks appointments the voice agent booked.*
+
+## What happens during a call
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor P as Caller
+    participant V as Vapi<br/>(STT · LLM · TTS)
+    participant N as n8n webhook<br/>(self-hosted)
+    participant G as Google Calendar
+    participant D as Staff dashboard
+    P->>V: "I need an appointment tomorrow morning"
+    V->>N: tool call freie_termine_suchen (HTTPS + bearer token)
+    N->>G: freeBusy for opening hours
+    G-->>N: busy times
+    N-->>V: 3 free slots (holidays, vacation, lead time applied)
+    V->>P: offers the slots
+    P->>V: picks one, gives name + date of birth
+    V->>N: tool call termin_buchen
+    N->>G: re-check slot, then create event
+    N-->>V: confirmed
+    V->>P: confirms the appointment
+    D->>N: staff opens the day view (own token)
+    N->>G: list events
+```
+
+## Engineering highlights
+
+- **Logic outside the n8n canvas, tested like normal code.** Slot calculation, validation and name matching live in `src/lib.js` (plain JavaScript). `build.js` injects them into the n8n Code nodes and generates both workflows and the Vapi assistant. That keeps them reproducible and reviewable in git diffs, and nobody hand-edits JSON.
+- **Voice-specific details:** speech recognition often misspells names, so patients are found by **phonetic matching (Kölner Phonetik)** plus date of birth. Tool answers are phrased to be read aloud and tell the agent which internal values (like `start`) it must not read out.
+- **No double bookings:** the slot is re-checked on the server right before booking (grid position + freeBusy). A taken slot returns alternatives.
+- **Self-hosted and locked down:** Docker Compose with n8n, task runners, Postgres, the dashboard and Caddy (automatic HTTPS). From the internet, only `POST /webhook/vapi-praxis` is reachable. The n8n editor is only available through an SSH tunnel, and internal routes return 403.
+- **Secrets stay on the server:** tokens are generated in `docker/.env` (mode 600) and imported into n8n from there. The Vapi key is prompted invisibly and checked against Vapi before it's saved (`docker/vapi-einrichten.sh`). The Google service account has no project roles, access to a single calendar, minimal scopes and a domain allowlist.
+- **Data minimisation:** n8n does not keep successful executions, and the E2E test checks that no request data remains in the database.
+- **Tests:** 24 unit tests (logic + dashboard security: login lockout, CSRF, session handling) and an E2E test that starts a real n8n 2.40.7 against a fake Google Calendar and SMTP server.
+
+## What runs live
+
+| Part | Where |
+|---|---|
+| Voice agent | Vapi, model `claude-sonnet-5`, German prompt ([`vapi/system-prompt.de.md`](vapi/system-prompt.de.md)), US test number |
+| Workflows | n8n 2.40.7 on a Hetzner CX23 (Falkenstein, ~7 €/month), Docker Compose |
+| Calendar | Google Calendar through a service account |
+| Dashboard | Node server behind Caddy/HTTPS, personal logins |
+
+**For reviewers:** access to the live dashboard and a test call are available on request (the login isn't published here).
+
+Built from the terminal with **Claude Code** as a pair programmer, The order was: a spec with testable acceptance criteria ([`SPEC.md`](SPEC.md)), then code with tests, then hosting and live debugging on the server.
+
+## Features
+
 Patients call the practice number. A German-speaking AI assistant picks up and can:
 
 - **find free appointments** based on opening hours, the Google Calendar, holidays and vacation
@@ -177,4 +242,4 @@ What is built in:
 - Only incoming calls. SMS or phone reminders are not included.
 - Double bookings in the exact same second (two callers, same slot) are unlikely but theoretically possible.
 - The dashboard only shows settings; they are changed in `src/config.js`. Users are managed with the command-line script, not in the browser.
-- The Docker setup and the connection to real Vapi and Google have **not yet been tested live**. The n8n workflows and the dashboard were tested end to end, with fake Google and mail services.
+- Live so far as a **demo** (see [What runs live](#what-runs-live)): the Docker setup, Google Calendar through the service account and the Vapi connection were checked on the real server. SMTP for callback e-mails isn't configured there yet, so callback requests only land in the dashboard. The E2E test uses the OAuth variant against a fake calendar; the service-account credential was only checked live.
