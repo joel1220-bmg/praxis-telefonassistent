@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anrufweg Praxisassistent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root {
+  --bg: #f3f6f4;
+  --flaeche: #ffffff;
+  --zone: #e7eeea;
+  --zone-rand: #9fb5ab;
+  --tinte: #17231e;
+  --leise: #56665f;
+  --linie: #cad6d0;
+  --akzent: #0d7a63;
+  --akzent-weich: #d7ede6;
+  --fluss: #c56a07;
+  --fluss-weich: #fbe8cf;
+  --warn: #b3261e;
+  --schatten: 0 1px 2px rgba(23, 35, 30, .07), 0 4px 16px rgba(23, 35, 30, .05);
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --kond: "IBM Plex Sans Condensed", "Arial Narrow", "IBM Plex Sans", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1412; --flaeche: #16201c; --zone: #1b2823; --zone-rand: #3f5a50; --tinte: #e3ebe7; --leise: #9aaca4;
+    --linie: #2c3b35; --akzent: #3cc9a6; --akzent-weich: #173a31; --fluss: #f2a93b; --fluss-weich: #3a2a12; --warn: #ff8a80;
+    --schatten: none; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1412; --flaeche: #16201c; --zone: #1b2823; --zone-rand: #3f5a50; --tinte: #e3ebe7; --leise: #9aaca4;
+  --linie: #2c3b35; --akzent: #3cc9a6; --akzent-weich: #173a31; --fluss: #f2a93b; --fluss-weich: #3a2a12; --warn: #ff8a80;
+  --schatten: none; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--tinte); font: 15px/1.55 var(--sans); padding-inline: 16px; padding-block: 28px 56px; }
+.seite { max-width: 1180px; margin: 0 auto; display: grid; gap: 40px; }
+h1, h2, h3 { font-family: var(--kond); text-wrap: balance; margin: 0; letter-spacing: .005em; }
+h1 { font-size: clamp(1.9rem, 4vw, 2.6rem); line-height: 1.1; }
+h2 { font-size: 1.45rem; }
+h3 { font-size: 1.1rem; }
+p { margin: 0; max-width: 68ch; }
+code, .mono { font-family: var(--mono); font-size: .86em; }
+code { background: var(--akzent-weich); color: var(--tinte); padding: 1px 5px; border-radius: 4px; }
+.etikett { font-family: var(--mono); font-size: .74rem; text-transform: uppercase; letter-spacing: .08em; color: var(--leise); }
+
+/* Kopf */
+.kopf { display: grid; gap: 10px; }
+.kopf p { color: var(--leise); font-size: 1.05rem; }
+.fakten { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.fakten span { font-family: var(--mono); font-size: .8rem; border: 1px solid var(--linie); background: var(--flaeche); border-radius: 99px; padding: 3px 10px; color: var(--leise); }
+
+/* Ablauf-Wahl */
+.ablaeufe { display: flex; flex-wrap: wrap; gap: 8px; }
+.ablaeufe button {
+  font: 500 .92rem var(--sans); color: var(--tinte); background: var(--flaeche); border: 1px solid var(--linie);
+  border-radius: 8px; padding: 8px 14px; cursor: pointer;
+}
+.ablaeufe button:hover { border-color: var(--akzent); }
+.ablaeufe button[aria-pressed="true"] { background: var(--akzent); border-color: var(--akzent); color: var(--flaeche); }
+button:focus-visible, .knoten:focus-visible { outline: 2px solid var(--fluss); outline-offset: 2px; }
+
+/* Bühne: Diagramm + Tafel */
+.buehne { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(280px, 1fr); gap: 16px; align-items: start; }
+.diagramm-rahmen { background: var(--flaeche); border: 1px solid var(--linie); border-radius: 12px; box-shadow: var(--schatten); overflow-x: auto; }
+svg.diagramm { display: block; width: 100%; min-width: 640px; height: auto; }
+.zone { fill: var(--zone); stroke: var(--zone-rand); stroke-dasharray: 6 5; stroke-width: 1.2; }
+.zone-titel { fill: var(--leise); font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.knoten { cursor: pointer; }
+.knoten rect.koerper { fill: var(--flaeche); stroke: var(--linie); stroke-width: 1.4; transition: stroke .2s, fill .2s; }
+.knoten:hover rect.koerper { stroke: var(--akzent); }
+.knoten.aktiv rect.koerper { stroke: var(--fluss); stroke-width: 2.4; fill: var(--fluss-weich); }
+.knoten.gewaehlt rect.koerper { stroke: var(--akzent); stroke-width: 2.4; }
+.knoten .name { fill: var(--tinte); font: 700 17px var(--kond); }
+.knoten .zeile { fill: var(--leise); font: 400 12.5px var(--mono); }
+.knoten .marke { fill: var(--akzent); }
+.kante { fill: none; stroke: var(--linie); stroke-width: 2; transition: stroke .2s; }
+.kante.aktiv { stroke: var(--fluss); stroke-width: 3; stroke-dasharray: 9 7; animation: fliessen 1s linear infinite; }
+.kante-text { fill: var(--leise); font: 400 11.5px var(--mono); }
+.kante-text.aktiv { fill: var(--fluss); font-weight: 500; }
+.spitze { fill: var(--linie); }
+.spitze-aktiv { fill: var(--fluss); }
+@keyframes fliessen { to { stroke-dashoffset: -32; } }
+@media (prefers-reduced-motion: reduce) { .kante.aktiv { animation: none; } }
+
+.tafel { background: var(--flaeche); border: 1px solid var(--linie); border-radius: 12px; box-shadow: var(--schatten); padding: 18px; display: grid; gap: 12px; }
+.tafel .schritt-nr { font-family: var(--mono); font-size: .78rem; color: var(--fluss); }
+.tafel h3 { font-size: 1.2rem; }
+.tafel .wo { display: grid; gap: 4px; border-top: 1px solid var(--linie); padding-top: 10px; }
+.tafel .wo code { background: none; padding: 0; color: var(--akzent); }
+.punkte { display: flex; gap: 5px; }
+.punkte span { width: 22px; height: 4px; border-radius: 2px; background: var(--linie); }
+.punkte span.an { background: var(--fluss); }
+.steuerung { display: flex; gap: 8px; }
+.steuerung button, .tafel .zurueck {
+  font: 500 .9rem var(--sans); color: var(--tinte); background: var(--bg); border: 1px solid var(--linie); border-radius: 8px; padding: 7px 12px; cursor: pointer;
+}
+.steuerung button.vor { background: var(--akzent); color: var(--flaeche); border-color: var(--akzent); margin-left: auto; }
+.steuerung button:disabled { opacity: .4; cursor: default; }
+.tafel ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.hinweis { font-size: .85rem; color: var(--leise); }
+
+/* Abschnitte */
+.abschnitt { display: grid; gap: 14px; }
+.abschnitt > p { color: var(--leise); }
+.fliessband { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.station { background: var(--flaeche); border: 1px solid var(--linie); border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.station .etikett { color: var(--akzent); }
+.station ul { margin: 0; padding-left: 16px; font-family: var(--mono); font-size: .8rem; color: var(--leise); display: grid; gap: 2px; }
+.grenzen { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px 22px; margin: 0; padding: 0; list-style: none; }
+.grenzen li { display: grid; grid-template-columns: 26px 1fr; gap: 8px; align-items: start; }
+.grenzen .nr { font-family: var(--mono); font-size: .8rem; color: var(--flaeche); background: var(--akzent); border-radius: 5px; text-align: center; line-height: 22px; }
+.tabelle-rahmen { overflow-x: auto; background: var(--flaeche); border: 1px solid var(--linie); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; min-width: 560px; }
+th, td { text-align: left; padding: 9px 14px; border-top: 1px solid var(--linie); vertical-align: top; }
+thead th { border-top: none; font: 500 .74rem var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--leise); }
+td:first-child { font-family: var(--mono); font-size: .84rem; color: var(--akzent); white-space: nowrap; }
+.fuss { color: var(--leise); font-size: .85rem; border-top: 1px solid var(--linie); padding-top: 14px; }
+
+@media (max-width: 900px) {
+  .buehne { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="seite">
+  <header class="kopf">
+    <span class="etikett">KI-Telefonassistent für Arztpraxen · Architektur</span>
+    <h1>Was passiert, wenn eine Patientin in der Praxis anruft</h1>
+    <p>Ein Voice Agent nimmt ab, n8n auf einem eigenen Server erledigt die Arbeit, Google Calendar hält die Termine, und das Praxisteam sieht alles im Dashboard. Wähle einen Ablauf und gehe ihn Schritt für Schritt durch, oder klicke auf einen Baustein.</p>
+    <div class="fakten">
+      <span>n8n 2.40.7 selbst gehostet</span><span>Vapi · Claude Sonnet 5 · Deepgram · ElevenLabs</span><span>Hetzner CX23 · Docker Compose</span><span>30 Tests + E2E</span>
+    </div>
+  </header>
+
+  <section class="abschnitt" aria-labelledby="t-ablauf">
+    <h2 id="t-ablauf">Abläufe</h2>
+    <div class="ablaeufe" id="ablaeufe" role="group" aria-label="Ablauf wählen"></div>
+    <div class="buehne">
+      <div class="diagramm-rahmen"><svg class="diagramm" id="diagramm" viewBox="0 0 1000 620" role="img" aria-labelledby="diagramm-titel"><title id="diagramm-titel">Bausteine des Telefonassistenten und ihre Verbindungen</title></svg></div>
+      <aside class="tafel" id="tafel" aria-live="polite"></aside>
+    </div>
+  </section>
+
+  <section class="abschnitt" aria-labelledby="t-build">
+    <h2 id="t-build">Vom Code zum laufenden Workflow</h2>
+    <p>Die Logik steht nicht im n8n-Editor, sondern in normalem JavaScript mit Tests. Ein Build-Skript bettet sie in die Workflows ein. So bleibt jede Änderung im Git-Diff lesbar.</p>
+    <div class="fliessband">
+      <div class="station"><span class="etikett">1 · Quelle</span><h3>Logik und Praxisdaten</h3><ul><li>src/lib.js</li><li>src/config.js</li><li>vapi/system-prompt.de.md</li></ul></div>
+      <div class="station"><span class="etikett">2 · Prüfen</span><h3>Tests</h3><ul><li>npm test · 30 Tests</li><li>E2E gegen echtes n8n</li><li>GitHub Actions</li></ul></div>
+      <div class="station"><span class="etikett">3 · Erzeugen</span><h3>npm run build</h3><ul><li>n8n/praxis-telefonassistent.workflow.json</li><li>n8n/praxis-dashboard-api.workflow.json</li><li>vapi/assistant.json</li></ul></div>
+      <div class="station"><span class="etikett">4 · Ausrollen</span><h3>Auf den Server</h3><ul><li>n8n import:workflow (CLI)</li><li>docker/vapi-einrichten.sh</li><li>docker compose build dashboard</li></ul></div>
+    </div>
+  </section>
+
+  <section class="abschnitt" aria-labelledby="t-grenzen">
+    <h2 id="t-grenzen">Sicherheitsgrenzen</h2>
+    <ul class="grenzen">
+      <li><span class="nr">1</span><span>Von außen ist auf der n8n-Adresse nur <code>/webhook/vapi-praxis</code> erreichbar, und nur mit Bearer-Token. Den Editor gibt es nur per SSH-Tunnel.</span></li>
+      <li><span class="nr">2</span><span>Interne Wege (<code>/intern/*</code>, Dashboard-API) laufen nur im Docker-Netz. Caddy antwortet von außen mit 403.</span></li>
+      <li><span class="nr">3</span><span>n8n speichert keine erfolgreichen Ausführungen. Patientendaten bleiben nur im Kalender und bei Rückrufen im Dashboard.</span></li>
+      <li><span class="nr">4</span><span>Der Google-Zugang ist ein Service-Account ohne Projektrollen, mit einem freigegebenen Kalender, zwei Scopes und einer Domain-Freigabeliste.</span></li>
+      <li><span class="nr">5</span><span>Geheimnisse stehen nur in <code>docker/.env</code> auf dem Server (Modus 600), nie im Repo.</span></li>
+      <li><span class="nr">6</span><span>Dashboard: persönliche Logins (scrypt), Sperre nach 5 Fehlversuchen, CSRF-Schutz, strenge CSP.</span></li>
+    </ul>
+  </section>
+
+  <section class="abschnitt" aria-labelledby="t-repo">
+    <h2 id="t-repo">Wo was liegt</h2>
+    <div class="tabelle-rahmen">
+      <table>
+        <thead><tr><th scope="col">Pfad</th><th scope="col">Inhalt</th></tr></thead>
+        <tbody>
+          <tr><td>src/lib.js</td><td>Freie Slots, Buchungsprüfung, Kölner Phonetik, Anrufbericht. Reine Funktionen, von n8n und Tests gleich genutzt.</td></tr>
+          <tr><td>src/config.js</td><td>Sprechzeiten, Terminarten, Feiertage, Urlaub, Kalender-ID, ROI-Annahmen.</td></tr>
+          <tr><td>build.js</td><td>Erzeugt beide n8n-Workflows und den Vapi-Assistenten.</td></tr>
+          <tr><td>dashboard/</td><td>Node-Server ohne Framework, SQLite für Rückrufe und Anruf-Kennzahlen, Oberfläche.</td></tr>
+          <tr><td>docker/</td><td>Compose mit n8n, Task-Runnern, Postgres, Dashboard, Caddy. Einrichtungsskript für Vapi.</td></tr>
+          <tr><td>test/, test-e2e/</td><td>Unit- und Servertests, E2E mit echtem n8n gegen Kalender- und Mail-Attrappe.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="fuss">Live-Demo ohne echte Patientendaten. Code: github.com/joel1220-bmg/praxis-telefonassistent</p>
+</div>
+
+<script>
+'use strict';
+const NS = 'http://www.w3.org/2000/svg';
+
+// Bausteine: Position im viewBox 1000×620
+const KNOTEN = {
+  anrufer: { x: 30, y: 60, b: 200, h: 78, name: 'Anruferin', zeilen: ['Telefon', 'deutschsprachig'],
+    rolle: 'Ruft die Praxisnummer an. Spricht ganz normal, der Assistent fragt nach, was er braucht.',
+    dateien: [], sicher: ['Zu Beginn: KI-Hinweis (EU AI Act) und Notfall-Hinweis 112', 'Keine medizinische Beratung'] },
+  vapi: { x: 30, y: 210, b: 200, h: 128, name: 'Vapi', zeilen: ['Sprache → Text: Deepgram', 'Gespräch: Claude Sonnet 5', 'Text → Sprache: ElevenLabs', '5 Werkzeuge + Weiterleiten'],
+    rolle: 'Der Voice Agent. Hört zu, entscheidet anhand des Prompts, welches Werkzeug er braucht, und ruft dafür den n8n-Webhook auf.',
+    dateien: ['vapi/system-prompt.de.md', 'vapi/assistant.json (erzeugt)', 'docker/vapi-einrichten.sh'],
+    sicher: ['Aufzeichnung aus', 'Nach dem Anruf nur der end-of-call-report an n8n'] },
+  team: { x: 30, y: 480, b: 200, h: 78, name: 'Praxisteam', zeilen: ['Browser', 'persönlicher Login'],
+    rolle: 'Empfang und Ärztin sehen Termine, Rückrufwünsche, Auslastung und die Wirkung des Assistenten.',
+    dateien: [], sicher: ['Anmeldung mit Benutzer und Passwort', 'Sitzung endet nach 10 Stunden'] },
+  caddy: { x: 300, y: 180, b: 132, h: 380, name: 'Caddy', zeilen: ['HTTPS', "Let's Encrypt", '', 'lässt durch:', '/webhook/', 'vapi-praxis', '', 'Dashboard', '', 'blockt:', '/intern/*', 'n8n-Editor'],
+    rolle: 'Einziger Eingang in den Server. Holt Zertifikate automatisch und entscheidet pro Pfad, was durchdarf.',
+    dateien: ['docker/Caddyfile'], sicher: ['Alles andere auf der n8n-Adresse: 403', 'Firewall: nur 22, 80, 443 offen'] },
+  n8n: { x: 480, y: 70, b: 260, h: 172, name: 'n8n', zeilen: ['Workflow Telefonassistent', '· 7 Wege: suchen, buchen,', '  finden, absagen, Rückruf,', '  direkt, Anrufbericht', 'Workflow Dashboard-API', 'Code = src/lib.js'],
+    rolle: 'Die Arbeit passiert hier. Jeder Werkzeugaufruf läuft durch "Anfrage vorbereiten" (Eingaben prüfen) und dann den passenden Weg zu Google, Mail oder Dashboard.',
+    dateien: ['n8n/praxis-telefonassistent.workflow.json', 'n8n/praxis-dashboard-api.workflow.json', 'build.js'],
+    sicher: ['Webhook nur mit Bearer-Token', 'Erfolgreiche Ausführungen werden nicht gespeichert', 'Editor nur per SSH-Tunnel'] },
+  postgres: { x: 480, y: 270, b: 150, h: 82, name: 'Postgres', zeilen: ['n8n-Daten', 'verschlüsselt'],
+    rolle: 'Speichert Workflows und verschlüsselte Zugangsdaten von n8n. Keine Patientendaten aus erfolgreichen Anrufen.',
+    dateien: ['docker/docker-compose.yml'], sicher: ['Fehler-Ausführungen nach 72 Stunden gelöscht'] },
+  dashboard: { x: 480, y: 400, b: 260, h: 158, name: 'Dashboard', zeilen: ['Node ohne Framework', 'SQLite: Rückrufe, Anrufe', 'Termine · Rückrufe ·', 'Auslastung · Wirkung', '/intern/rueckruf', '/intern/anruf'],
+    rolle: 'Web-App fürs Praxisteam. Termine holt es über den Dashboard-API-Workflow aus Google, Rückrufe und Anruf-Kennzahlen schickt n8n direkt.',
+    dateien: ['dashboard/server.js', 'dashboard/roi.js', 'dashboard/speicher.js', 'dashboard/public/'],
+    sicher: ['scrypt, Sperre nach 5 Fehlversuchen, CSRF, CSP', 'Anruf-Kennzahlen ohne Nummer oder Inhalt, Löschung nach 400 Tagen'] },
+  google: { x: 790, y: 70, b: 180, h: 110, name: 'Google Calendar', zeilen: ['Quelle der Wahrheit', 'freeBusy + Events', 'Service-Account'],
+    rolle: 'Hier stehen alle Termine, auch die vom Empfang. Der Assistent bucht nur in freie Zeit und findet oder löscht nur seine eigenen Termine.',
+    dateien: ['src/config.js (kalenderId)'], sicher: ['Scopes: calendar.events, calendar.freebusy', 'Nur ein freigegebener Kalender'] },
+  smtp: { x: 790, y: 250, b: 180, h: 84, name: 'E-Mail', zeilen: ['SMTP der Praxis', 'Rückrufwünsche'],
+    rolle: 'Rückrufwünsche gehen zusätzlich als Mail an den Empfang, auch wenn das Dashboard gerade nicht erreichbar ist.',
+    dateien: [], sicher: ['Schutz gegen Header-Injection', 'In der Live-Demo noch nicht eingerichtet'] },
+};
+
+// Verbindungen: Pfad (SVG d), Beschriftung, Position der Beschriftung
+const KANTEN = {
+  'anrufer-vapi': { d: 'M130 138 L130 210', text: 'Sprache', tx: 138, ty: 180 },
+  'vapi-caddy': { d: 'M230 262 L300 262', text: 'HTTPS', tx: 238, ty: 254 },
+  'caddy-n8n': { d: 'M432 230 C455 230 455 156 480 156', text: '', tx: 0, ty: 0 },
+  'n8n-google': { d: 'M740 125 L790 125', text: '', tx: 0, ty: 0 },
+  'n8n-smtp': { d: 'M740 200 C765 200 765 292 790 292', text: 'Mail', tx: 752, ty: 245 },
+  'n8n-postgres': { d: 'M555 242 L555 270', text: '', tx: 0, ty: 0 },
+  'n8n-dashboard': { d: 'M700 242 L700 400', text: '/intern/*', tx: 706, ty: 330 },
+  'dashboard-n8n': { d: 'M650 400 L650 242', text: 'API', tx: 620, ty: 365 },
+  'team-caddy': { d: 'M230 519 L300 519', text: 'HTTPS', tx: 238, ty: 511 },
+  'caddy-dashboard': { d: 'M432 480 L480 480', text: '', tx: 0, ty: 0 },
+};
+
+const ABLAEUFE = [
+  { id: 'buchen', titel: 'Termin buchen', schritte: [
+    { titel: 'Die Anruferin sagt, was sie braucht', text: '„Ich hätte gern morgen früh einen Kontrolltermin.“ Vapi wandelt die Sprache in Text um, Claude entscheidet: erst freie Termine suchen.', kanten: ['anrufer-vapi'], knoten: ['anrufer', 'vapi'], wo: ['Werkzeug freie_termine_suchen(terminart, ab_datum, tageszeit)'] },
+    { titel: 'Werkzeugaufruf an den eigenen Server', text: 'Vapi schickt den Aufruf per HTTPS mit Bearer-Token. Caddy lässt nur diesen einen Pfad zu n8n durch.', kanten: ['vapi-caddy', 'caddy-n8n'], knoten: ['vapi', 'caddy', 'n8n'], wo: ['POST /webhook/vapi-praxis', 'docker/Caddyfile'] },
+    { titel: 'n8n prüft die Eingaben und fragt Google', text: '„Anfrage vorbereiten“ prüft Terminart und Datum und rechnet den Zeitraum aus: mindestens 60 Minuten Vorlauf, höchstens 28 Tage voraus. Dann fragt n8n Google, wann schon belegt ist.', kanten: ['n8n-google'], knoten: ['n8n', 'google'], wo: ['lib.vorbereiten → Weg 0', 'Google freeBusy'] },
+    { titel: 'Freie Slots zurück ans Telefon', text: 'Aus Sprechzeiten, 10-Minuten-Raster, Feiertagen und Belegung entstehen höchstens drei Vorschläge, maximal zwei pro Tag. Die Antwort ist so formuliert, dass der Agent sie vorlesen kann.', kanten: ['caddy-n8n', 'vapi-caddy', 'anrufer-vapi'], knoten: ['n8n', 'vapi', 'anrufer'], wo: ['lib.nachSuche, lib.freieSlots'] },
+    { titel: 'Buchen, mit Nachprüfung', text: 'Nach Name und Geburtsdatum ruft der Agent termin_buchen. n8n prüft den Slot direkt davor noch einmal bei Google, zählt die offenen Termine der Person (höchstens 2) und trägt dann ein.', kanten: ['vapi-caddy', 'caddy-n8n', 'n8n-google'], knoten: ['n8n', 'google'], wo: ['lib.buchungPruefen, lib.nachBuchung', 'Event mit Quelle „telefonassistent“'] },
+    { titel: 'Sofort im Dashboard', text: 'Der Termin steht mit dem Chip „Telefonassistent“ in der Tagesansicht. Das Dashboard liest den Kalender über den zweiten Workflow, mit eigenem Token.', kanten: ['team-caddy', 'caddy-dashboard', 'dashboard-n8n', 'n8n-google'], knoten: ['team', 'dashboard', 'n8n', 'google'], wo: ['GET /api/termine', 'Workflow Dashboard-API'] },
+  ] },
+  { id: 'absagen', titel: 'Termin absagen', schritte: [
+    { titel: 'Wer sind Sie?', text: 'Zum Absagen fragt der Agent nach Nachname und Geburtsdatum. Die Spracherkennung schreibt Namen oft falsch, „Meyer“ statt „Meier“.', kanten: ['anrufer-vapi'], knoten: ['anrufer', 'vapi'], wo: ['Werkzeug termine_finden(nachname, geburtsdatum)'] },
+    { titel: 'Suche mit Kölner Phonetik', text: 'n8n holt die Termine mit diesem Geburtsdatum und vergleicht den Nachnamen nach Klang. So findet „Meyer“ auch „Meier“, aber nur Termine, die der Assistent selbst gebucht hat.', kanten: ['vapi-caddy', 'caddy-n8n', 'n8n-google'], knoten: ['n8n', 'google'], wo: ['lib.koelnerPhonetik, lib.nachFinden'] },
+    { titel: 'Absage nach Prüfung', text: 'termin_absagen prüft, ob Name, Geburtsdatum und Quelle zum Termin passen, und löscht ihn erst dann.', kanten: ['vapi-caddy', 'caddy-n8n', 'n8n-google'], knoten: ['n8n', 'google'], wo: ['lib.absagePruefen, lib.nachAbsage'] },
+  ] },
+  { id: 'rueckruf', titel: 'Rückruf notieren', schritte: [
+    { titel: 'Ein Anliegen ohne Termin', text: 'Rezept, Überweisung, Befund, Krankschreibung. Der Agent fragt nur ein Stichwort ab, keine Symptome im Detail.', kanten: ['anrufer-vapi'], knoten: ['anrufer', 'vapi'], wo: ['Werkzeug rueckruf_notieren(kategorie, anliegen, dringend)'] },
+    { titel: 'Zwei Wege, damit nichts verloren geht', text: 'n8n schickt den Wunsch als Mail an den Empfang und speichert ihn im Dashboard. Klappt einer der beiden Wege, gilt der Rückruf als übermittelt.', kanten: ['vapi-caddy', 'caddy-n8n', 'n8n-smtp', 'n8n-dashboard'], knoten: ['n8n', 'smtp', 'dashboard'], wo: ['POST /intern/rueckruf', 'lib.nachRueckruf'] },
+    { titel: 'Abarbeiten im Team', text: 'Im Reiter Rückrufe stehen dringende oben. „Erledigt“ merkt sich Benutzer und Zeit, nach 30 Tagen wird gelöscht.', kanten: ['team-caddy', 'caddy-dashboard'], knoten: ['team', 'dashboard'], wo: ['Reiter Rückrufe'] },
+  ] },
+  { id: 'wirkung', titel: 'Nach dem Anruf', schritte: [
+    { titel: 'Vapi schickt einen Anrufbericht', text: 'Nach dem Auflegen kommt der end-of-call-report mit Dauer, Kosten, Ende-Grund und dem ganzen Gesprächsverlauf.', kanten: ['vapi-caddy', 'caddy-n8n'], knoten: ['vapi', 'n8n'], wo: ["serverMessages: ['end-of-call-report']"] },
+    { titel: 'n8n behält nur Zahlen', text: 'Weg 6 übernimmt Zeitpunkt, Dauer, Kosten und vier Ja/Nein-Ergebnisse. Die kommen aus den Antworten der eigenen Werkzeuge, zum Beispiel „Gebucht:“. Telefonnummer und Transkript werden nicht weitergegeben.', kanten: ['n8n-dashboard'], knoten: ['n8n', 'dashboard'], wo: ['lib.anrufBericht', 'POST /intern/anruf'] },
+    { titel: 'Wirkung für die Praxisinhaberin', text: 'Der Reiter Wirkung zeigt Anrufe (auch außerhalb der Sprechzeiten), gesparte Personalzeit in Euro gegen die KI-Kosten und die Stoßzeiten. Die Annahmen stehen daneben.', kanten: ['team-caddy', 'caddy-dashboard'], knoten: ['team', 'dashboard'], wo: ['GET /api/roi', 'dashboard/roi.js'] },
+  ] },
+  { id: 'team', titel: 'Praxisteam öffnet das Dashboard', schritte: [
+    { titel: 'Anmelden', text: 'Persönlicher Login, Passwort als scrypt-Hash. Nach fünf Fehlversuchen ist 15 Minuten Pause.', kanten: ['team-caddy', 'caddy-dashboard'], knoten: ['team', 'caddy', 'dashboard'], wo: ['POST /api/login'] },
+    { titel: 'Termine und Auslastung', text: 'Das Dashboard fragt den Kalender über den Dashboard-API-Workflow. Die Auslastung der nächsten 14 Tage nutzt dieselbe Slot-Logik wie das Telefon.', kanten: ['dashboard-n8n', 'n8n-google'], knoten: ['dashboard', 'n8n', 'google'], wo: ['Workflow Dashboard-API', 'GET /api/auslastung'] },
+  ] },
+];
+
+const zustand = { ablauf: ABLAEUFE[0], schritt: 0, knoten: null };
+const svg = document.getElementById('diagramm');
+const tafel = document.getElementById('tafel');
+
+function sEl(tag, attrs = {}, text) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+function hEl(tag, attrs = {}, ...kinder) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+  }
+  for (const k of kinder.flat()) if (k != null) e.append(k);
+  return e;
+}
+
+function zeichnen() {
+  const defs = sEl('defs');
+  for (const [id, klasse] of [['pfeil', 'spitze'], ['pfeil-aktiv', 'spitze-aktiv']]) {
+    const m = sEl('marker', { id, viewBox: '0 0 10 10', refX: '8', refY: '5', markerWidth: '7', markerHeight: '7', orient: 'auto-start-reverse' });
+    m.append(sEl('path', { d: 'M0 0 L10 5 L0 10 z', class: klasse }));
+    defs.append(m);
+  }
+  svg.append(defs);
+  svg.append(sEl('rect', { x: 20, y: 20, width: 225, height: 580, rx: 12, class: 'zone' }));
+  svg.append(sEl('text', { x: 34, y: 42, class: 'zone-titel' }, 'Internet'));
+  svg.append(sEl('rect', { x: 285, y: 20, width: 475, height: 580, rx: 12, class: 'zone' }));
+  svg.append(sEl('text', { x: 299, y: 42, class: 'zone-titel' }, 'Eigener Server · Hetzner CX23 · Docker'));
+  svg.append(sEl('rect', { x: 775, y: 20, width: 210, height: 340, rx: 12, class: 'zone' }));
+  svg.append(sEl('text', { x: 789, y: 42, class: 'zone-titel' }, 'Dienste der Praxis'));
+
+  for (const [id, k] of Object.entries(KANTEN)) {
+    svg.append(sEl('path', { d: k.d, class: 'kante', id: `k-${id}`, 'marker-end': 'url(#pfeil)' }));
+    if (k.text) svg.append(sEl('text', { x: k.tx, y: k.ty, class: 'kante-text', id: `kt-${id}` }, k.text));
+  }
+  for (const [id, k] of Object.entries(KNOTEN)) {
+    const g = sEl('g', { class: 'knoten', id: `n-${id}`, tabindex: '0', role: 'button', 'aria-label': `${k.name}: Details anzeigen` });
+    g.append(sEl('rect', { x: k.x, y: k.y, width: k.b, height: k.h, rx: 9, class: 'koerper' }));
+    g.append(sEl('rect', { x: k.x, y: k.y + 12, width: 4, height: 22, rx: 2, class: 'marke' }));
+    g.append(sEl('text', { x: k.x + 14, y: k.y + 30, class: 'name' }, k.name));
+    k.zeilen.forEach((z, i) => g.append(sEl('text', { x: k.x + 14, y: k.y + 52 + i * 17, class: 'zeile' }, z)));
+    g.addEventListener('click', () => knotenZeigen(id));
+    g.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); knotenZeigen(id); } });
+    svg.append(g);
+  }
+}
+
+function markieren(kanten, knoten, gewaehlt) {
+  for (const id of Object.keys(KANTEN)) {
+    const an = kanten.includes(id);
+    document.getElementById(`k-${id}`).classList.toggle('aktiv', an);
+    document.getElementById(`k-${id}`).setAttribute('marker-end', an ? 'url(#pfeil-aktiv)' : 'url(#pfeil)');
+    const t = document.getElementById(`kt-${id}`);
+    if (t) t.classList.toggle('aktiv', an);
+  }
+  for (const id of Object.keys(KNOTEN)) {
+    const g = document.getElementById(`n-${id}`);
+    g.classList.toggle('aktiv', knoten.includes(id));
+    g.classList.toggle('gewaehlt', id === gewaehlt);
+  }
+}
+
+function ablaufKnoepfe() {
+  const box = document.getElementById('ablaeufe');
+  box.replaceChildren(...ABLAEUFE.map((a) => hEl('button', {
+    type: 'button', 'aria-pressed': String(a === zustand.ablauf),
+    onclick: () => { zustand.ablauf = a; zustand.schritt = 0; zustand.knoten = null; ablaufKnoepfe(); schrittZeigen(); },
+  }, a.titel)));
+}
+
+function schrittZeigen() {
+  const a = zustand.ablauf;
+  const s = a.schritte[zustand.schritt];
+  markieren(s.kanten, s.knoten, null);
+  tafel.replaceChildren(
+    hEl('span', { class: 'schritt-nr' }, `${a.titel} · Schritt ${zustand.schritt + 1} von ${a.schritte.length}`),
+    hEl('div', { class: 'punkte', 'aria-hidden': 'true' }, a.schritte.map((_, i) => hEl('span', { class: i <= zustand.schritt ? 'an' : '' }))),
+    hEl('h3', {}, s.titel),
+    hEl('p', {}, s.text),
+    hEl('div', { class: 'wo' }, hEl('span', { class: 'etikett' }, 'Wo im Code'), s.wo.map((w) => hEl('code', {}, w))),
+    hEl('div', { class: 'steuerung' },
+      hEl('button', { type: 'button', onclick: () => { zustand.schritt -= 1; schrittZeigen(); }, ...(zustand.schritt === 0 ? { disabled: '' } : {}) }, 'Zurück'),
+      hEl('button', { type: 'button', class: 'vor', onclick: () => { zustand.schritt += 1; schrittZeigen(); }, ...(zustand.schritt === a.schritte.length - 1 ? { disabled: '' } : {}) }, 'Weiter')),
+    hEl('p', { class: 'hinweis' }, 'Tipp: Klicke im Bild auf einen Baustein für Details.'),
+  );
+}
+
+function knotenZeigen(id) {
+  const k = KNOTEN[id];
+  zustand.knoten = id;
+  const beteiligt = Object.keys(KANTEN).filter((kid) => kid.split('-').includes(id));
+  markieren(beteiligt, [], id);
+  tafel.replaceChildren(
+    hEl('span', { class: 'etikett' }, 'Baustein'),
+    hEl('h3', {}, k.name),
+    hEl('p', {}, k.rolle),
+    k.dateien.length ? hEl('div', { class: 'wo' }, hEl('span', { class: 'etikett' }, 'Dateien'), k.dateien.map((d) => hEl('code', {}, d))) : null,
+    hEl('div', { class: 'wo' }, hEl('span', { class: 'etikett' }, 'Schutz'), hEl('ul', {}, k.sicher.map((s) => hEl('li', {}, s)))),
+    hEl('button', { type: 'button', class: 'zurueck', onclick: () => { zustand.knoten = null; schrittZeigen(); } }, 'Zurück zum Ablauf'),
+  );
+}
+
+zeichnen();
+ablaufKnoepfe();
+schrittZeigen();
+</script>
+
+</body>
+</html>

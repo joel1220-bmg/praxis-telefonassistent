@@ -19,6 +19,8 @@
 
 ## What happens during a call
 
+Interactive walkthrough (German): open [`docs/architektur.html`](docs/architektur.html) in a browser. It plays five flows step by step (booking, cancelling, callback, after the call, practice team) on a diagram of the real components.
+
 ```mermaid
 sequenceDiagram
     autonumber
