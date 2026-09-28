@@ -45,8 +45,8 @@ sequenceDiagram
 - **Logic outside the n8n canvas, tested like normal code.** Slot calculation, validation and name matching live in `src/lib.js` (plain JavaScript). `build.js` injects them into the n8n Code nodes and generates both workflows and the Vapi assistant. That keeps them reproducible and reviewable in git diffs, and nobody hand-edits JSON.
 - **Voice-specific details:** speech recognition often misspells names, so patients are found by **phonetic matching (Kölner Phonetik)** plus date of birth. Tool answers are phrased to be read aloud and tell the agent which internal values (like `start`) it must not read out.
 - **No double bookings:** the slot is re-checked on the server right before booking (grid position + freeBusy). A taken slot returns alternatives.
-- **Self-hosted and locked down:** Docker Compose with n8n, task runners, Postgres, the dashboard and Caddy (automatic HTTPS). From the internet, only `POST /webhook/vapi-praxis` is reachable. The n8n editor is only available through an SSH tunnel, and internal routes return 403.
-- **Secrets stay on the server:** tokens are generated in `docker/.env` (mode 600) and imported into n8n from there. The Vapi key is prompted invisibly and checked against Vapi before it's saved (`docker/vapi-einrichten.sh`). The Google service account has no project roles, access to a single calendar, minimal scopes and a domain allowlist.
+- **Self-hosted and locked down:** Docker Compose with n8n, task runners, Postgres, the dashboard and Caddy (automatic HTTPS). On the n8n domain, only `/webhook/vapi-praxis` is reachable from the internet. The n8n editor is only available through an SSH tunnel, and the dashboard's internal routes return 403.
+- **Secrets stay on the server:** tokens are generated in `docker/.env` (mode 600). On my server, I imported them into n8n with the n8n CLI, so they never went through the browser or a chat. The Vapi key is prompted invisibly and checked against Vapi before it's saved (`docker/vapi-einrichten.sh`). The Google service account has no project roles, access to a single calendar, minimal scopes and a domain allowlist.
 - **Data minimisation:** n8n does not keep successful executions, and the E2E test checks that no request data remains in the database.
 - **Tests:** 24 unit tests (logic + dashboard security: login lockout, CSRF, session handling) and an E2E test that starts a real n8n 2.40.7 against a fake Google Calendar and SMTP server.
 
@@ -160,14 +160,20 @@ You need a server with Docker and two domains whose DNS points to the server, e.
 ```bash
 cd docker && cp .env.example .env
 ```
-Fill in `.env` (both domains and five random values, e.g. `openssl rand -hex 32` each), then:
+Fill in `.env` (both domains and six random values, e.g. `openssl rand -hex 32` each), then:
 ```bash
 docker compose up -d
 ```
-Open `https://<your-domain>`, create the owner account and **turn on two-factor authentication**.
+
+#### n8n editor (only through an SSH tunnel)
+On the n8n domain, Caddy lets only `/webhook/vapi-praxis` through; everything else returns 403, and n8n listens only on `127.0.0.1:5678` of the server. To open the editor, start a tunnel from your PC and leave it running:
+```bash
+ssh -N -L 5678:127.0.0.1:5678 root@<server>
+```
+Then open http://localhost:5678, create the owner account and **turn on two-factor authentication**. All the following n8n steps happen there.
 
 ### 3. Create the credentials in n8n
-1. **Header Auth** named `Vapi Bearer-Token`: name `Authorization`, value `Bearer <long random token>`.
+1. **Header Auth** named `Vapi Bearer-Token`: name `Authorization`, value `Bearer <VAPI_WEBHOOK_TOKEN from .env>`.
 2. **Google Service Account API** named `Google Service Account Praxis`: in Google Cloud, enable the Calendar API and create a service account (no roles) with a JSON key. Share the practice calendar with the service account's e-mail ("Make changes and see all event details") and put that calendar's ID into `kalenderId` in `src/config.js` (not `primary`). In n8n, enter the service account e-mail and the private key from the JSON file; never commit the key. Paste the key with real line breaks, e.g. copy it with PowerShell: `(Get-Content <file>.json -Raw | ConvertFrom-Json).private_key | Set-Clipboard` (otherwise n8n reports "secretOrPrivateKey must be an asymmetric key"). The calendar nodes are HTTP Request nodes, so also turn on **"Set up for use in HTTP Request node"**, set **Scope(s)** to `https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy`, and set **Allowed HTTP Request Domains** to *Specific Domains* `www.googleapis.com, oauth2.googleapis.com` (without `oauth2.…` no token can be fetched and the assistant only says "Kalender nicht erreichbar"). Delete the JSON file afterwards. Use a **Google Workspace** account with a data processing agreement, not a private Gmail account. (Tests and `lokal/start.js` build with `--google-auth oauth` and use the credential `Google Kalender Praxis` against the fake calendar.)
 3. **SMTP** named `SMTP Praxis`: the practice's mail server, with TLS.
 4. **Header Auth** named `Dashboard API-Token`: name `Authorization`, value `Bearer <DASHBOARD_API_TOKEN from .env>`.

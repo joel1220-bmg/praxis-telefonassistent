@@ -18,6 +18,8 @@ key_gueltig() { # fragt Vapi mit dem Key an; Key über stdin an curl, damit er n
 }
 
 if ! grep -q '^VAPI_API_KEY=.' .env; then
+  # Bei Strg-C während der unsichtbaren Eingabe das Terminal-Echo wiederherstellen.
+  if [ -t 0 ]; then trap 'stty echo' EXIT; trap 'stty echo; exit 130' INT TERM; fi
   versuch=1
   while :; do
     printf 'Vapi PRIVATE API Key einfügen (Rechtsklick), dann Enter. Die Eingabe bleibt unsichtbar: '

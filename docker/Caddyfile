@@ -10,7 +10,7 @@
 {$N8N_DOMAIN} {
 	import sicherheit
 	# From outside only the Vapi webhook gets through. The editor, REST API and dashboard API stay closed;
-	# the editor is reached through an SSH tunnel (see README, "n8n-Editor").
+	# the editor is reached through an SSH tunnel (see README, "n8n editor (only through an SSH tunnel)").
 	@vapi path /webhook/vapi-praxis
 	handle @vapi {
 		reverse_proxy n8n:5678
