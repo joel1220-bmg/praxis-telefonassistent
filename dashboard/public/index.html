@@ -31,6 +31,7 @@
         <button role="tab" data-ansicht="termine">Termine</button>
         <button role="tab" data-ansicht="rueckrufe">Rückrufe <span id="rueckruf-zaehler" class="zaehler" hidden></span></button>
         <button role="tab" data-ansicht="auslastung">Auslastung</button>
+        <button role="tab" data-ansicht="wirkung">Wirkung</button>
         <button role="tab" data-ansicht="einstellungen">Einstellungen</button>
         <button role="tab" data-ansicht="status">Status</button>
       </nav>
@@ -69,6 +70,27 @@
       <h2>Auslastung der nächsten 14 Tage</h2>
       <p class="leise">Anteil der Sprechzeit, der bereits belegt ist.</p>
       <div id="auslastung-liste" class="balken-liste"></div>
+    </section>
+
+    <section id="ansicht-wirkung" class="ansicht" hidden>
+      <div class="leiste">
+        <div class="umschalter" role="group" aria-label="Zeitraum">
+          <button data-tage="7" class="klein">7 Tage</button>
+          <button data-tage="30" class="klein aktiv">30 Tage</button>
+          <button data-tage="90" class="klein">90 Tage</button>
+        </div>
+        <span id="wirkung-zeitraum" class="leise"></span>
+      </div>
+      <div id="wirkung-kacheln" class="kacheln"></div>
+      <h2>Anrufe pro Tag</h2>
+      <div class="karte">
+        <div id="wirkung-tage" class="saeulen" role="img" aria-label="Anrufe pro Tag"></div>
+        <div class="legende"><span class="punkt drinnen"></span>in den Sprechzeiten <span class="punkt draussen"></span>außerhalb (abends, Wochenende, Feiertag)</div>
+      </div>
+      <h2>Wann angerufen wird</h2>
+      <div class="karte"><div id="wirkung-raster" class="raster-karte"></div></div>
+      <h2>So wird gerechnet</h2>
+      <div id="wirkung-annahmen" class="karte"></div>
     </section>
 
     <section id="ansicht-einstellungen" class="ansicht" hidden>

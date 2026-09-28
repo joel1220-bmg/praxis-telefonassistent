@@ -235,3 +235,80 @@ test('Härtung: toolCallId-Länge, strenges Geburtsdatum, Name ohne Lautcode', (
   const h = lib.vorbereiten(config, vapi('termine_finden', { nachname: 'H', geburtsdatum: '1980-05-17' }), JETZT);
   assert.match(ergebnis(h.antwort), /Nachname fehlt/);
 });
+
+// Nachgebildet nach Vapis end-of-call-report (Felder laut Doku; der erste echte Anruf bestätigt die Namen).
+function anrufBericht(extra = {}) {
+  return {
+    message: {
+      type: 'end-of-call-report',
+      endedReason: 'customer-ended-call',
+      cost: 0.2345,
+      startedAt: '2026-09-28T06:10:00.000Z',
+      endedAt: '2026-09-28T06:12:30.000Z',
+      durationSeconds: 150.4,
+      call: { id: 'call-abc-123', customer: { number: '+4915112345678' } },
+      customer: { number: '+4915112345678' },
+      artifact: {
+        transcript: 'AI: Guten Tag. User: Ich heiße Berta Geheim und brauche einen Termin.',
+        messages: [
+          { role: 'bot', message: 'Guten Tag.' },
+          { role: 'user', message: 'Ich heiße Berta Geheim.' },
+          { role: 'tool_calls', toolCalls: [{ function: { name: 'termin_buchen', arguments: '{"nachname":"Geheim"}' } }] },
+          { role: 'tool_call_result', name: 'termin_buchen', result: 'Gebucht: Kontrolltermin am Montag für Berta Geheim.' },
+        ],
+      },
+      analysis: { summary: 'Berta Geheim hat einen Termin gebucht.' },
+      ...extra,
+    },
+  };
+}
+
+test('Anrufbericht: nur Kennzahlen, keine Telefonnummer, kein Name, kein Transkript', () => {
+  const v = lib.vorbereiten(config, anrufBericht(), JETZT);
+  assert.equal(v.route, lib.ROUTE.anruf);
+  assert.deepEqual(v.antwort, { results: [] });
+  assert.match(v.dashboard.url, /\/intern\/anruf$/);
+  assert.deepEqual(v.dashboard.body, {
+    id: 'call-abc-123', start: '2026-09-28T06:10:00Z', dauerSek: 150, kostenUsd: 0.2345, endeGrund: 'customer-ended-call',
+    gebucht: true, abgesagt: false, rueckruf: false, weitergeleitet: false,
+  });
+  const alsText = JSON.stringify(v.dashboard.body);
+  for (const spur of ['+49', 'Geheim', 'Berta', 'Termin am']) assert.ok(!alsText.includes(spur), spur);
+});
+
+test('Anrufbericht: Ergebnisse aus Werkzeug-Antworten, fehlende Felder, Grenzen', () => {
+  const nachrichten = (liste) => ({ artifact: { messages: liste } });
+  // Fehlgeschlagene Buchung zählt nicht, Absage und Rückruf schon, Weiterleitung über transferCall
+  const gemischt = lib.anrufBericht(anrufBericht(nachrichten([
+    { role: 'tool_call_result', name: 'termin_buchen', result: 'Technischer Fehler: Termin wurde NICHT gebucht.' },
+    { role: 'tool_call_result', name: 'termin_absagen', result: 'Abgesagt: Termin am Dienstag.' },
+    { role: 'tool_call_result', name: 'rueckruf_notieren', result: 'Rückrufwunsch wurde an das Praxisteam übermittelt.' },
+    { role: 'tool_calls', toolCalls: [{ function: { name: 'transferCall' } }] },
+    { role: 'tool_call_result', name: 'freie_termine_suchen', result: 'Gebucht: gefälscht' },
+  ])).message, z(JETZT));
+  assert.deepEqual([gemischt.gebucht, gemischt.abgesagt, gemischt.rueckruf, gemischt.weitergeleitet], [false, true, true, true]);
+
+  // Dauer aus Start/Ende, wenn durationSeconds fehlt; Weiterleitung auch am endedReason erkennbar
+  const ohneDauer = lib.anrufBericht(anrufBericht({ durationSeconds: undefined, endedReason: 'assistant-forwarded-call' }).message, z(JETZT));
+  assert.equal(ohneDauer.dauerSek, 150);
+  assert.equal(ohneDauer.weitergeleitet, true);
+
+  // Leerer Bericht: keine Ausnahme, Startzeit = jetzt, alles 0/false
+  const leer = lib.anrufBericht({ type: 'end-of-call-report' }, z(JETZT));
+  assert.deepEqual(leer, { id: '', start: '2026-09-28T05:00:00Z', dauerSek: 0, kostenUsd: 0, endeGrund: '', gebucht: false, abgesagt: false, rueckruf: false, weitergeleitet: false });
+
+  // Unsinnige Werte werden begrenzt
+  const grenzen = lib.anrufBericht(anrufBericht({ durationSeconds: 99999, cost: -5 }).message, z(JETZT));
+  assert.equal(grenzen.dauerSek, 7200);
+  assert.equal(grenzen.kostenUsd, 0);
+});
+
+test('Sprechzeit-Prüfung: Blöcke, Wochenende, Feiertag', () => {
+  assert.equal(lib.inSprechzeit(config, z('2026-09-28T08:00')), true, 'Mo Beginn');
+  assert.equal(lib.inSprechzeit(config, z('2026-09-28T11:59')), true);
+  assert.equal(lib.inSprechzeit(config, z('2026-09-28T12:00')), false, 'Mittagspause');
+  assert.equal(lib.inSprechzeit(config, z('2026-09-28T20:30')), false, 'abends');
+  assert.equal(lib.inSprechzeit(config, z('2026-10-03T10:00')), false, 'Samstag');
+  assert.equal(lib.inSprechzeit(config, z('2026-09-30T09:00')), false, 'Feiertag (Test-Config)');
+  assert.equal(lib.inSprechzeit(config, DateTime.fromISO('2026-09-28T07:30:00Z')), true, 'UTC-Zeitpunkt wird in Praxiszeit umgerechnet');
+});

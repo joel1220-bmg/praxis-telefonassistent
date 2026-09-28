@@ -13,6 +13,7 @@
   --rot: #c62828;
   --rot-hg: #fdecea;
   --grau-hg: #eef0f3;
+  --lila: #8250df;
   --schatten: 0 1px 2px rgba(20, 30, 45, 0.06);
   color-scheme: light;
 }
@@ -32,6 +33,7 @@
     --rot: #ff7b72;
     --rot-hg: #3a1614;
     --grau-hg: #202833;
+    --lila: #b392f0;
     --schatten: none;
     color-scheme: dark;
   }
@@ -151,6 +153,34 @@ input {
 .balken span.voll { background: var(--rot); }
 .balken-zahl { text-align: right; font-variant-numeric: tabular-nums; color: var(--leise); font-size: 0.9rem; }
 
+/* Wirkung (ROI) */
+.kacheln { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.kachel { display: grid; gap: 2px; align-content: start; }
+.kachel strong { font-size: 1.6rem; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.kachel.positiv strong { color: var(--gruen); }
+.kachel.negativ strong { color: var(--rot); }
+.klein-text { font-size: 0.82rem; }
+.saeulen { display: flex; align-items: flex-end; gap: 3px; height: 170px; padding-top: 6px; }
+.saeulen.dicht { gap: 1px; }
+.saeule { flex: 1; height: 100%; display: flex; align-items: flex-end; min-width: 2px; }
+.stapel { width: 100%; display: flex; flex-direction: column; border-radius: 3px 3px 0 0; overflow: hidden; }
+.stapel span { display: block; width: 100%; }
+.stapel .drinnen, .legende .drinnen { background: var(--akzent); }
+.stapel .draussen, .legende .draussen { background: var(--lila); }
+.legende { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 10px; font-size: 0.85rem; color: var(--leise); }
+.legende .punkt { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.raster-karte { overflow-x: auto; }
+table.heat { width: 100%; min-width: 520px; border-collapse: separate; border-spacing: 3px; }
+table.heat th { font-size: 0.75rem; font-weight: 500; text-align: center; padding: 0 2px; min-width: 22px; }
+table.heat tbody th { text-align: right; padding-right: 6px; }
+table.heat td { height: 24px; border-radius: 4px; padding: 0; }
+.stufe-0 { background: var(--grau-hg); }
+.stufe-1 { background: color-mix(in srgb, var(--akzent) 22%, var(--flaeche)); }
+.stufe-2 { background: color-mix(in srgb, var(--akzent) 45%, var(--flaeche)); }
+.stufe-3 { background: color-mix(in srgb, var(--akzent) 70%, var(--flaeche)); }
+.stufe-4 { background: var(--akzent); }
+#wirkung-annahmen p { margin: 0 0 8px; }
+
 /* Einstellungen & Status */
 .raster { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 .raster .karte h3 { margin: 0 0 8px; font-size: 1rem; }
@@ -170,4 +200,6 @@ ul.einfach { margin: 0; padding-left: 18px; }
   .termin-zeile .chip { grid-column: 2; justify-self: start; }
   .termin-details { padding-left: 14px; }
   .balken-zeile { grid-template-columns: 90px 1fr 70px; }
+  .kachel strong { font-size: 1.3rem; }
+  .saeulen { height: 120px; }
 }

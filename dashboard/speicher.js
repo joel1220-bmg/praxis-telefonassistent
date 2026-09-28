@@ -66,4 +66,78 @@ class RueckrufSpeicher {
   }
 }
 
-module.exports = { RueckrufSpeicher };
+// Anruf-Kennzahlen für die ROI-Ansicht. Bewusst ohne Telefonnummer, Namen oder Transkript.
+class AnrufSpeicher {
+  constructor(datei) {
+    this.db = new DatabaseSync(datei);
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS anrufe (
+        id TEXT PRIMARY KEY,
+        start TEXT NOT NULL,
+        dauer_sek INTEGER NOT NULL,
+        kosten_usd REAL NOT NULL,
+        ende_grund TEXT NOT NULL,
+        gebucht INTEGER NOT NULL,
+        abgesagt INTEGER NOT NULL,
+        rueckruf INTEGER NOT NULL,
+        weitergeleitet INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS anrufe_start ON anrufe (start);`);
+  }
+
+  // start als UTC-ISO ("…Z"), damit Zeitraum-Abfragen als Textvergleich stimmen. Doppelte IDs werden ignoriert.
+  hinzufuegen(a) {
+    const e = this.db.prepare(`INSERT OR IGNORE INTO anrufe (id, start, dauer_sek, kosten_usd, ende_grund, gebucht, abgesagt, rueckruf, weitergeleitet)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(a.id, a.start, a.dauerSek, a.kostenUsd, a.endeGrund,
+      a.gebucht ? 1 : 0, a.abgesagt ? 1 : 0, a.rueckruf ? 1 : 0, a.weitergeleitet ? 1 : 0);
+    return e.changes === 1;
+  }
+
+  zeitraum(vonIso, bisIso) {
+    return this.db.prepare('SELECT * FROM anrufe WHERE start >= ? AND start < ? ORDER BY start').all(vonIso, bisIso).map((r) => ({
+      id: r.id, start: r.start, dauerSek: Number(r.dauer_sek), kostenUsd: Number(r.kosten_usd), endeGrund: r.ende_grund,
+      gebucht: r.gebucht === 1, abgesagt: r.abgesagt === 1, rueckruf: r.rueckruf === 1, weitergeleitet: r.weitergeleitet === 1,
+    }));
+  }
+
+  aufraeumen(grenzeIso) {
+    return this.db.prepare('DELETE FROM anrufe WHERE start < ?').run(grenzeIso).changes;
+  }
+
+  // Erzeugte Beispielanrufe der letzten 90 Tage (fester Startwert, damit die Demo immer gleich aussieht).
+  demoDaten(jetzt) {
+    let zufall = 20260928;
+    const z = () => { zufall = (zufall * 1103515245 + 12345) % 2147483648; return zufall / 2147483648; };
+    const stundenGewicht = [0, 0, 0, 0, 0, 0, 1, 4, 9, 10, 8, 6, 4, 5, 6, 8, 7, 5, 4, 3, 2, 1, 1, 0];
+    const summe = stundenGewicht.reduce((s, g) => s + g, 0);
+    const stunde = () => {
+      let r = z() * summe;
+      for (let h = 0; h < 24; h++) { r -= stundenGewicht[h]; if (r < 0) return h; }
+      return 12;
+    };
+    for (let tag = 89; tag >= 0; tag--) {
+      const d = jetzt.minus({ days: tag }).startOf('day');
+      const wochenende = d.weekday >= 6;
+      const anzahl = Math.round((wochenende ? 3 : 14) + z() * (wochenende ? 4 : 12));
+      for (let i = 0; i < anzahl; i++) {
+        const start = d.set({ hour: stunde(), minute: Math.floor(z() * 60), second: Math.floor(z() * 60) });
+        if (start > jetzt) continue;
+        const dauerSek = z() < 0.08 ? Math.round(5 + z() * 12) : Math.round(45 + z() * 200);
+        const r = dauerSek < 20 ? 1 : z(); // kurze Anrufe (aufgelegt) ohne Ergebnis
+        this.hinzufuegen({
+          id: `demo-${tag}-${i}`,
+          start: start.toUTC().toISO({ suppressMilliseconds: true }),
+          dauerSek,
+          kostenUsd: Math.round((dauerSek / 60) * 0.13 * 10000) / 10000,
+          endeGrund: r < 0.1 ? 'assistant-forwarded-call' : 'customer-ended-call',
+          weitergeleitet: r < 0.1,
+          gebucht: r >= 0.1 && r < 0.48,
+          rueckruf: r >= 0.48 && r < 0.68,
+          abgesagt: r >= 0.68 && r < 0.76,
+        });
+      }
+    }
+  }
+}
+
+module.exports = { RueckrufSpeicher, AnrufSpeicher };

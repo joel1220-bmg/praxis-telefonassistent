@@ -9,11 +9,13 @@
 
 **Status (09/2026):** running as a **live demo** on my own Hetzner server: a Vapi phone number, self-hosted n8n and a real Google Calendar. It holds no real patient data and is not yet used by a practice. See [what runs live](#what-runs-live) and [limitations](#limitations).
 
+![Dashboard, tab "Wirkung": calls handled, staff time and euros saved, AI cost, calls per day and busy hours](docs/bilder/dashboard-wirkung.png)
+
 | Appointments | Callback requests | Utilisation |
 |---|---|---|
 | ![Dashboard: appointments of the day](docs/bilder/dashboard-termine.png) | ![Dashboard: callback requests](docs/bilder/dashboard-rueckrufe.png) | ![Dashboard: utilisation for 14 days](docs/bilder/dashboard-auslastung.png) |
 
-*Staff dashboard in demo mode (sample data only). "Telefonassistent" marks appointments the voice agent booked.*
+*Staff dashboard in demo mode (sample data only). The tab "Wirkung" (impact) shows the ROI for the practice owner: calls handled (also outside opening hours), bookings, staff time and euros saved versus AI cost. "Telefonassistent" marks appointments the voice agent booked.*
 
 ## What happens during a call
 
@@ -36,6 +38,8 @@ sequenceDiagram
     N->>G: re-check slot, then create event
     N-->>V: confirmed
     V->>P: confirms the appointment
+    V->>N: end-of-call-report (after hanging up)
+    N->>D: only numbers: time, duration, cost, outcome (no phone number, no transcript)
     D->>N: staff opens the day view (own token)
     N->>G: list events
 ```
@@ -47,8 +51,9 @@ sequenceDiagram
 - **No double bookings:** the slot is re-checked on the server right before booking (grid position + freeBusy). A taken slot returns alternatives.
 - **Self-hosted and locked down:** Docker Compose with n8n, task runners, Postgres, the dashboard and Caddy (automatic HTTPS). On the n8n domain, only `/webhook/vapi-praxis` is reachable from the internet. The n8n editor is only available through an SSH tunnel, and the dashboard's internal routes return 403.
 - **Secrets stay on the server:** tokens are generated in `docker/.env` (mode 600). On my server, I imported them into n8n with the n8n CLI, so they never went through the browser or a chat. The Vapi key is prompted invisibly and checked against Vapi before it's saved (`docker/vapi-einrichten.sh`). The Google service account has no project roles, access to a single calendar, minimal scopes and a domain allowlist.
-- **Data minimisation:** n8n does not keep successful executions, and the E2E test checks that no request data remains in the database.
-- **Tests:** 24 unit tests (logic + dashboard security: login lockout, CSRF, session handling) and an E2E test that starts a real n8n 2.40.7 against a fake Google Calendar and SMTP server.
+- **ROI you can defend:** after each call Vapi sends a report; n8n reduces it to numbers (time, duration, cost, outcome from our own tool results) and the dashboard turns them into staff time and euros saved versus AI cost. The assumptions (hourly cost, follow-up time, exchange rate) are in `src/config.js` and shown next to the numbers.
+- **Data minimisation:** n8n does not keep successful executions, the call report keeps no phone number or transcript, and the E2E test checks that no request data remains in n8n or the dashboard.
+- **Tests:** 30 unit and server tests (logic, ROI calculation, dashboard security: login lockout, CSRF, session handling) and an E2E test that starts a real n8n 2.40.7 against a fake Google Calendar and SMTP server.
 
 ## What runs live
 
@@ -61,7 +66,7 @@ sequenceDiagram
 
 **For reviewers:** access to the live dashboard and a test call are available on request (the login isn't published here).
 
-Built from the terminal with **Claude Code** as a pair programmer, The order was: a spec with testable acceptance criteria ([`SPEC.md`](SPEC.md)), then code with tests, then hosting and live debugging on the server.
+Built from the terminal with **Claude Code** as a pair programmer. The order was: a spec with testable acceptance criteria ([`SPEC.md`](SPEC.md)), then code with tests, then hosting and live debugging on the server.
 
 ## Features
 
@@ -74,7 +79,7 @@ Patients call the practice number. A German-speaking AI assistant picks up and c
 - **transfer the caller to the practice team** during opening hours
 - **handle emergencies**: it tells the caller to hang up and dial 112, or 116 117 outside opening hours, and never gives medical advice
 
-The practice team gets a **web dashboard** with appointments, callback requests, utilisation for the next 14 days, settings and system status.
+The practice team gets a **web dashboard** with appointments, callback requests, utilisation for the next 14 days, the impact of the assistant ("Wirkung": calls, outcomes, staff time and euros saved versus AI cost), settings and system status.
 
 ```
 Caller ──phone──▶ Vapi (speech recognition, voice, LLM)
@@ -184,7 +189,7 @@ Then open http://localhost:5678, create the owner account and **turn on two-fact
 docker compose exec n8n n8n import:workflow --separate --input=/import
 ```
 Open each workflow in n8n and pick the right credential in each red node, then **publish** it:
-- **Praxis-Telefonassistent**: the webhook (`Vapi Bearer-Token`), the 7 calendar nodes, the e-mail node and "Dashboard: Rückruf speichern" (`Dashboard Intern-Token`). Webhook URL: `https://<n8n-domain>/webhook/vapi-praxis`.
+- **Praxis-Telefonassistent**: the webhook (`Vapi Bearer-Token`), the 7 calendar nodes, the e-mail node, "Dashboard: Rückruf speichern" and "Dashboard: Anruf speichern" (both `Dashboard Intern-Token`). Webhook URL: `https://<n8n-domain>/webhook/vapi-praxis`.
 - **Praxis-Dashboard-API**: the webhook (`Dashboard API-Token`) and the 3 calendar nodes.
 
 ### 4b. Create dashboard users
@@ -221,9 +226,9 @@ npm test
 ```bash
 N8N_E2E_DIR=<empty folder> npm run e2e
 ```
-`npm test` covers the logic and the dashboard server: login, lockout after 5 failed attempts, CSRF protection, all API routes, error cases.
+`npm test` covers the logic and the dashboard server: login, lockout after 5 failed attempts, CSRF protection, all API routes, error cases, extracting the call report and the ROI calculation (fixed data, opening hours, holiday).
 
-The E2E test starts a real n8n (2.40.7) with a fake Google Calendar and a fake mail server, plus the real dashboard in live mode. It covers search, booking, double booking, a slot taken by someone else, find (with name variants), cancellation, wrong date of birth, callback e-mail, invalid input, Google outage and missing token, and it checks that **successful executions are not stored**. On the dashboard side it checks that a phone booking shows up in the dashboard, that callbacks from the phone land there, that cancelling in the dashboard deletes the appointment in the calendar, and that callbacks still go out by e-mail when the dashboard is offline.
+The E2E test starts a real n8n (2.40.7) with a fake Google Calendar and a fake mail server, plus the real dashboard in live mode. It covers search, booking, double booking, a slot taken by someone else, find (with name variants), cancellation, wrong date of birth, callback e-mail, invalid input, Google outage and missing token, and it checks that **successful executions are not stored**. On the dashboard side it checks that a phone booking shows up in the dashboard, that callbacks from the phone land there, that cancelling in the dashboard deletes the appointment in the calendar, that a call report reaches the ROI view without transcript or phone number (and a duplicate report isn't counted twice), and that callbacks still go out by e-mail when the dashboard is offline.
 
 ## Security & data protection (please read)
 
@@ -232,6 +237,7 @@ What is built in:
 - The assistant can only find or cancel appointments it booked itself, and only with last name + date of birth.
 - At most 2 open appointments per person (configurable), to prevent abuse.
 - n8n does **not keep successful executions**: it only marks them for deletion at first, and the settings in `docker-compose.yml` delete them for good within about a minute. Errors are deleted after 72 hours. Recording is turned off in Vapi.
+- **Call reports (ROI view):** Vapi sends only the `end-of-call-report` to n8n (`serverMessages`). The report does contain the transcript and the caller's number, but n8n passes on only time, duration, cost, end reason and four yes/no outcomes, and doesn't store the execution. The dashboard keeps these numbers for 400 days (`roi.aufbewahrenTage`) and never sees names, numbers or content.
 - Only minimal data is asked for: a keyword for the reason, not symptoms in detail.
 - **Dashboard:** personal logins (passwords as scrypt hashes), lockout after 5 failed attempts, session cookie HttpOnly/SameSite=Strict/Secure, CSRF protection, strict content security policy. Done callback requests are deleted automatically after 30 days (`rueckrufeAufbewahrenTage`). The internal endpoints are blocked from outside by Caddy. Recommended: make the dashboard reachable only from the practice network (see `docker/Caddyfile`).
 

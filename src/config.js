@@ -29,6 +29,15 @@ module.exports = {
   dashboardUrl: 'http://dashboard:8080',
   rueckrufeAufbewahrenTage: 30,
 
+  // Annahmen für die ROI-Ansicht ("Wirkung") im Dashboard. Werden dort neben den Zahlen angezeigt.
+  roi: {
+    stundensatzEuro: 25,        // Personalkosten pro Stunde am Empfang (Arbeitgeberkosten, Annahme)
+    nacharbeitMinuten: 1,       // Nacharbeit, die ein Telefonat am Empfang zusätzlich kosten würde
+    mindestSekunden: 20,        // kürzere Anrufe (aufgelegt, verwählt) zählen nicht als gesparte Zeit
+    usdInEur: 0.92,             // Umrechnung der Vapi-Kosten (Vapi rechnet in US-Dollar ab)
+    aufbewahrenTage: 400,       // so lange bleiben die Anruf-Kennzahlen gespeichert
+  },
+
   // Sprechzeiten je Wochentag (mo..so), mehrere Blöcke pro Tag möglich.
   sprechzeiten: {
     mo: [['08:00', '12:00'], ['15:00', '18:00']],

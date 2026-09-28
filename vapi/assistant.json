@@ -306,6 +306,14 @@
       }
     ]
   },
+  "server": {
+    "url": "<<N8N_WEBHOOK_URL>>",
+    "credentialId": "<<VAPI_CREDENTIAL_ID>>",
+    "timeoutSeconds": 20
+  },
+  "serverMessages": [
+    "end-of-call-report"
+  ],
   "voice": {
     "provider": "11labs",
     "model": "eleven_multilingual_v2",

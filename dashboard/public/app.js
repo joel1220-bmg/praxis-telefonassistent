@@ -1,7 +1,7 @@
 'use strict';
 // Praxis-Dashboard – Oberfläche. Alle Daten werden per textContent eingesetzt (kein innerHTML mit Fremddaten).
 
-const zustand = { ich: null, ansicht: 'termine', tag: null, rueckrufStatus: 'offen', zeitzone: 'Europe/Berlin' };
+const zustand = { ich: null, ansicht: 'termine', tag: null, rueckrufStatus: 'offen', wirkungTage: 30, zeitzone: 'Europe/Berlin' };
 const $ = (sel) => document.querySelector(sel);
 
 function el(tag, attrs = {}, ...kinder) {
@@ -10,6 +10,7 @@ function el(tag, attrs = {}, ...kinder) {
     if (v === undefined || v === null || v === false) continue;
     if (k === 'class') e.className = v;
     else if (k === 'breite') e.style.width = v; // über CSSOM, damit die strenge CSP (keine Inline-Styles) greift
+    else if (k === 'hoehe') e.style.height = v;
     else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
     else e.setAttribute(k, v === true ? '' : v);
   }
@@ -97,7 +98,9 @@ function zeigeAnsicht(name) {
 }
 
 function laden() {
-  const f = { termine: ladeTermine, rueckrufe: ladeRueckrufe, auslastung: ladeAuslastung, einstellungen: ladeEinstellungen, status: ladeStatus }[zustand.ansicht];
+  const f = {
+    termine: ladeTermine, rueckrufe: ladeRueckrufe, auslastung: ladeAuslastung, wirkung: ladeWirkung, einstellungen: ladeEinstellungen, status: ladeStatus,
+  }[zustand.ansicht];
   return f().catch((e) => melden(e.message));
 }
 
@@ -153,9 +156,9 @@ async function absagen(t) {
 }
 
 // ---------- Rückrufe ----------
-document.querySelectorAll('.umschalter button').forEach((b) => b.addEventListener('click', () => {
+document.querySelectorAll('#ansicht-rueckrufe .umschalter button').forEach((b) => b.addEventListener('click', () => {
   zustand.rueckrufStatus = b.dataset.status;
-  document.querySelectorAll('.umschalter button').forEach((x) => x.classList.toggle('aktiv', x === b));
+  document.querySelectorAll('#ansicht-rueckrufe .umschalter button').forEach((x) => x.classList.toggle('aktiv', x === b));
   ladeRueckrufe();
 }));
 
@@ -218,6 +221,71 @@ async function ladeAuslastung() {
         p === null ? null : el('span', { class: p >= 90 ? 'voll' : p >= 70 ? 'mittel' : '', breite: `${p}%` })),
       el('span', { class: 'balken-zahl' }, p === null ? t.geschlossen : `${p} % · ${t.termine} T.`));
   }));
+}
+
+// ---------- Wirkung (ROI) ----------
+const zahl = (x, stellen = 0) => new Intl.NumberFormat('de-DE', { minimumFractionDigits: stellen, maximumFractionDigits: stellen }).format(x);
+const euro = (x) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(x);
+const dauer = (sek) => `${Math.floor(sek / 60)}:${String(sek % 60).padStart(2, '0')} Min.`;
+const RASTER_STUNDEN = Array.from({ length: 17 }, (_, i) => i + 6); // 6 bis 22 Uhr
+const WOCHENTAG_KURZ = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+
+document.querySelectorAll('#ansicht-wirkung .umschalter button').forEach((b) => b.addEventListener('click', () => {
+  zustand.wirkungTage = Number(b.dataset.tage);
+  document.querySelectorAll('#ansicht-wirkung .umschalter button').forEach((x) => x.classList.toggle('aktiv', x === b));
+  ladeWirkung().catch((e) => melden(e.message));
+}));
+
+const kachel = (titel, wert, zusatz, klasse) => el('div', { class: `karte kachel${klasse ? ` ${klasse}` : ''}` },
+  el('span', { class: 'leise' }, titel), el('strong', {}, wert), zusatz ? el('span', { class: 'leise klein-text' }, zusatz) : null);
+
+async function ladeWirkung() {
+  const tage = zustand.wirkungTage;
+  const r = await anfrage('GET', `/api/roi?tage=${tage}`);
+  if (zustand.wirkungTage !== tage) return;
+  const k = r.kennzahlen;
+  $('#wirkung-zeitraum').textContent = `${tagKurz(mittag(r.zeitraum.von))} bis ${tagKurz(mittag(r.zeitraum.bis))}`;
+
+  const anteil = k.anrufe ? Math.round((k.ausserhalbSprechzeit / k.anrufe) * 100) : 0;
+  $('#wirkung-kacheln').replaceChildren(
+    kachel('Anrufe angenommen', zahl(k.anrufe), `${zahl(k.ausserhalbSprechzeit)} davon außerhalb der Sprechzeiten (${anteil} %)`),
+    kachel('Termine gebucht', zahl(k.gebucht), `${zahl(k.abgesagt)} abgesagt · ${zahl(k.rueckrufe)} Rückrufe · ${zahl(k.weitergeleitet)} weitergeleitet`),
+    kachel('Gesparte Personalzeit', `${zahl(k.personalStunden, 1)} Std.`, `Ø Gespräch ${dauer(k.durchschnittSekunden)}`),
+    kachel('Ersparnis', euro(k.ersparnisEuro), `KI-Kosten ${euro(k.kiKostenEuro)}`),
+    kachel('Netto-Nutzen', euro(k.nettoEuro), k.roiFaktor ? `${zahl(k.roiFaktor, 1)}-fach der KI-Kosten` : 'noch keine Kosten', k.nettoEuro >= 0 ? 'positiv' : 'negativ'),
+  );
+
+  const max = Math.max(1, ...r.proTag.map((t) => t.drinnen + t.draussen));
+  const saeulen = $('#wirkung-tage');
+  saeulen.classList.toggle('dicht', r.proTag.length > 31);
+  saeulen.replaceChildren(...r.proTag.map((t) => {
+    const summe = t.drinnen + t.draussen;
+    return el('div', { class: 'saeule', title: `${tagKurz(mittag(t.datum))}: ${summe} Anrufe, davon ${t.draussen} außerhalb` },
+      el('div', { class: 'stapel', hoehe: `${(summe / max) * 100}%` },
+        t.draussen ? el('span', { class: 'draussen', hoehe: `${(t.draussen / summe) * 100}%` }) : null,
+        t.drinnen ? el('span', { class: 'drinnen', hoehe: `${(t.drinnen / summe) * 100}%` }) : null));
+  }));
+
+  const rasterMax = Math.max(1, ...r.stundenRaster.flat());
+  $('#wirkung-raster').replaceChildren(el('table', { class: 'heat' },
+    el('thead', {}, el('tr', {}, el('th', {}), RASTER_STUNDEN.map((h) => el('th', { scope: 'col' }, h % 2 ? '' : String(h))))),
+    el('tbody', {}, r.stundenRaster.map((zeile, w) => el('tr', {},
+      el('th', { scope: 'row' }, WOCHENTAG_KURZ[w]),
+      RASTER_STUNDEN.map((h) => {
+        const n = zeile[h];
+        const stufe = n === 0 ? 0 : Math.min(4, Math.ceil((n / rasterMax) * 4));
+        return el('td', { class: `stufe-${stufe}`, title: `${WOCHENTAG_KURZ[w]} ${h}–${h + 1} Uhr: ${n} Anrufe` });
+      }))))));
+
+  const a = r.annahmen;
+  $('#wirkung-annahmen').replaceChildren(
+    el('p', {}, `Gesparte Personalzeit = Gesprächsdauer + ${zahl(a.nacharbeitMinuten)} Min. Nacharbeit je Anruf, den der Assistent selbst geführt hat. `
+      + `Weitergeleitete Anrufe und Anrufe unter ${a.mindestSekunden} Sekunden zählen nicht.`),
+    el('p', {}, `Ersparnis = gesparte Stunden × ${euro(a.stundensatzEuro)} Personalkosten pro Stunde. `
+      + `KI-Kosten = Vapi-Kosten der Anrufe × ${zahl(a.usdInEur, 2)} € je US-Dollar.`),
+    el('p', { class: 'leise' }, `Alle Werte sind Annahmen und in src/config.js (roi) anpassbar. Gespeichert werden nur Zeitpunkt, Dauer, Kosten und das Ergebnis eines Anrufs, `
+      + `keine Telefonnummern, Namen oder Gesprächsinhalte. Löschung nach ${a.aufbewahrenTage} Tagen.`),
+  );
 }
 
 // ---------- Einstellungen ----------
@@ -283,7 +351,7 @@ async function starten() {
   $('#benutzer-name').textContent = zustand.ich.benutzer;
   let gespeichert = null;
   try { gespeichert = localStorage.getItem('praxis-ansicht'); } catch (e) { /* egal */ }
-  zeigeAnsicht(['termine', 'rueckrufe', 'auslastung', 'einstellungen', 'status'].includes(gespeichert) ? gespeichert : 'termine');
+  zeigeAnsicht(['termine', 'rueckrufe', 'auslastung', 'wirkung', 'einstellungen', 'status'].includes(gespeichert) ? gespeichert : 'termine');
   anfrage('GET', '/api/rueckrufe?status=offen').then((d) => zeigeZaehler(d.zaehler)).catch(() => {});
 }
 

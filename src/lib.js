@@ -2,7 +2,7 @@
 // Wird von build.js unverändert in die n8n-Code-Nodes eingebettet (dort ist `DateTime` = Luxon global)
 // und in den Tests mit `require('luxon').DateTime` aufgerufen.
 function makeLib(DateTime) {
-  const ROUTE = { suche: 0, buchen: 1, finden: 2, absagen: 3, rueckruf: 4, direkt: 5 };
+  const ROUTE = { suche: 0, buchen: 1, finden: 2, absagen: 3, rueckruf: 4, direkt: 5, anruf: 6 };
   const TOOL_ROUTE = {
     freie_termine_suchen: ROUTE.suche,
     termin_buchen: ROUTE.buchen,
@@ -261,6 +261,13 @@ function makeLib(DateTime) {
   function vorbereiten(config, body, jetztIso) {
     const jetzt = zeit(config, jetztIso);
     const nachricht = (body && body.message) || {};
+    if (nachricht.type === 'end-of-call-report') {
+      return {
+        route: ROUTE.anruf,
+        antwort: { results: [] },
+        dashboard: { url: `${config.dashboardUrl}/intern/anruf`, body: anrufBericht(nachricht, jetzt) },
+      };
+    }
     const aufruf = (nachricht.toolCallList || [])[0];
     if (nachricht.type !== 'tool-calls' || !aufruf || !aufruf.function) {
       return { route: ROUTE.direkt, antwort: { results: [] } };
@@ -531,6 +538,69 @@ function makeLib(DateTime) {
     return vorb.antwort;
   }
 
+  // ---------- Anrufbericht für die ROI-Ansicht ----------
+
+  // Aus Vapis end-of-call-report nur Zahlen übernehmen: keine Telefonnummer, kein Name, kein Transkript.
+  // Das Ergebnis eines Anrufs kommt aus den Antworten unserer eigenen Werkzeuge, nicht aus dem Gesagten.
+  const ERGEBNIS_MUSTER = {
+    gebucht: ['termin_buchen', /^Gebucht:/],
+    abgesagt: ['termin_absagen', /^Abgesagt:/],
+    rueckruf: ['rueckruf_notieren', /^Rückrufwunsch wurde/],
+  };
+
+  function anrufNachrichten(n) {
+    const a = n.artifact || {};
+    for (const liste of [a.messages, n.messages, (n.call || {}).messages]) if (Array.isArray(liste)) return liste.slice(0, 500);
+    return [];
+  }
+
+  function anrufBericht(n, jetzt) {
+    const call = n.call || {};
+    const zeitpunkt = (wert) => {
+      const d = DateTime.fromISO(text(wert, 40), { zone: 'utc' });
+      return d.isValid ? d : null;
+    };
+    const start = zeitpunkt(n.startedAt) || zeitpunkt(call.startedAt);
+    const ende = zeitpunkt(n.endedAt) || zeitpunkt(call.endedAt);
+    let dauer = Number(n.durationSeconds);
+    if (!Number.isFinite(dauer) && start && ende) dauer = ende.diff(start, 'seconds').seconds;
+    const kosten = Number(n.cost !== undefined ? n.cost : call.cost);
+    const endeGrund = text(n.endedReason || call.endedReason, 80);
+
+    const ergebnisse = { gebucht: false, abgesagt: false, rueckruf: false, weitergeleitet: /forward|transfer/i.test(endeGrund) };
+    for (const m of anrufNachrichten(n)) {
+      if (!m || typeof m !== 'object') continue;
+      for (const t of Array.isArray(m.toolCalls) ? m.toolCalls : []) {
+        if (t && t.function && t.function.name === 'transferCall') ergebnisse.weitergeleitet = true;
+      }
+      if (m.role !== 'tool_call_result') continue;
+      const ergebnis = text(m.result, 200);
+      for (const [feld, [werkzeug, muster]] of Object.entries(ERGEBNIS_MUSTER)) {
+        if (m.name === werkzeug && muster.test(ergebnis)) ergebnisse[feld] = true;
+      }
+    }
+    return {
+      id: text(call.id || n.callId, 100),
+      start: isoOhneMs(start || jetzt.toUTC()),
+      dauerSek: Number.isFinite(dauer) ? Math.round(Math.min(Math.max(dauer, 0), 7200)) : 0,
+      kostenUsd: Number.isFinite(kosten) ? Math.round(Math.min(Math.max(kosten, 0), 100) * 10000) / 10000 : 0,
+      endeGrund,
+      ...ergebnisse,
+    };
+  }
+
+  // Liegt ein Zeitpunkt in den Sprechzeiten? Feiertage und Praxisurlaub zählen als außerhalb.
+  function inSprechzeit(config, d) {
+    const t = d.setZone(config.zeitzone);
+    if (!istFrei(config, t.startOf('day'))) return false;
+    const minute = t.hour * 60 + t.minute;
+    return (config.sprechzeiten[WOCHENTAGE[t.weekday - 1]] || []).some(([von, bis]) => {
+      const [vh, vm] = von.split(':').map(Number);
+      const [bh, bm] = bis.split(':').map(Number);
+      return minute >= vh * 60 + vm && minute < bh * 60 + bm;
+    });
+  }
+
   // ---------- Dashboard-API (zweiter n8n-Workflow) ----------
 
   const DASHBOARD_ROUTE = { termine: 0, absagen: 1, direkt: 2 };
@@ -610,7 +680,7 @@ function makeLib(DateTime) {
   return {
     DASHBOARD_ROUTE, dashboardVorbereiten, dashboardTermine, dashboardAbsagePruefen, dashboardNachAbsage,
     ROUTE, Eingabefehler, KATEGORIEN, QUELLE, WOCHENTAGE, koelnerPhonetik, tagesSlots, freieSlots, istGueltigerSlot, istFrei,
-    sprechZeit, fruehesterStart, horizontEnde, text,
+    sprechZeit, fruehesterStart, horizontEnde, text, anrufBericht, inSprechzeit,
     vorbereiten, nachSuche, buchungPruefen, nachBuchung, nachFinden, absagePruefen, nachAbsage, nachRueckruf, direkteAntwort,
   };
 }

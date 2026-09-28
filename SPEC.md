@@ -93,5 +93,24 @@ Acceptance criteria:
 - H4 Monitoring (UptimeRobot, free) checks both addresses. Hetzner backups are on.
 - H5 `npm test` and E2E stay green (OAuth variant), the build produces the service account variant by default.
 
+## Extension: ROI view in the dashboard ("Wirkung")
+
+Goal: the practice owner sees what the assistant brings: how many calls it handled (including outside opening hours), what it did (booked, cancelled, took callbacks, forwarded), how much staff time that saved in euros, and what the AI calls cost.
+
+Data flow: after each call, Vapi sends an `end-of-call-report` to the existing n8n webhook (assistant-level `serverMessages` contains only this type). n8n reduces it to numbers and posts them to the dashboard (`POST /intern/anruf`, same intern token as `/intern/rueckruf`). The dashboard stores them in SQLite and computes the ROI.
+
+Acceptance criteria:
+- R1 Stored per call only: Vapi call ID (to drop duplicates), start time, duration in seconds, cost in USD, end reason, and four yes/no outcomes (booked, cancelled, callback taken, forwarded). No phone number, no name, no transcript, no recording URL. Outcomes come from the tool results in the report (e.g. a `termin_buchen` result starting with "Gebucht:"), not from what the caller said.
+- R2 `/intern/anruf` requires the intern token (401 without), validates and length-limits every field, ignores duplicates, and is blocked from outside by Caddy like all `/intern/*` routes.
+- R3 `GET /api/roi?tage=7|30|90` (login required) returns: number of calls, calls outside opening hours (holidays and vacation count as outside), total and average duration, the four outcome counts, staff hours saved, savings in €, AI cost in €, net benefit and ROI factor, calls per day (inside/outside opening hours) and a weekday × hour grid.
+- R4 The assumptions are in `src/config.js` (`roi`: hourly staff cost, follow-up minutes per call, USD→EUR rate, retention days) and are shown next to the numbers. Calls that were forwarded or shorter than a minimum length don't count as saved staff time.
+- R5 New tab "Wirkung" in the dashboard: KPI tiles, bar chart per day, heatmap of busy hours, assumptions. Demo mode shows generated sample calls. Strict CSP stays (no inline styles/scripts).
+- R6 Stored calls are deleted after the retention period.
+- R7 Tests: unit tests for extracting the report (including that no phone number/transcript is passed on) and for the ROI calculation (fixed data, opening hours, holiday); server tests for `/intern/anruf` and `/api/roi`. The E2E test sends a report through the real n8n to the dashboard and checks that the transcript and phone number appear neither in the dashboard nor in the n8n database.
+
+Non-goals: live call monitoring, per-caller statistics, exporting reports, changing the assumptions in the browser.
+
+Unverified until the first real call: the exact field names of Vapi's `end-of-call-report` (the extraction is written defensively and tested with a payload modelled on Vapi's documentation).
+
 ## Weighting
 Security & data minimisation > correctness > maintainability > few dependencies > performance.

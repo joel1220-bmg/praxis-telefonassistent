@@ -6,9 +6,10 @@ const path = require('path');
 const crypto = require('crypto');
 const { DateTime } = require('luxon');
 const { makeLib } = require('../src/lib');
-const { RueckrufSpeicher } = require('./speicher');
+const { RueckrufSpeicher, AnrufSpeicher } = require('./speicher');
 const { Benutzer } = require('./benutzer');
 const { DemoKalender, N8nKalender } = require('./kalender');
+const { roiBerechnen } = require('./roi');
 
 const lib = makeLib(DateTime);
 const SESSION_STUNDEN = 10;
@@ -35,6 +36,7 @@ class HttpFehler extends Error {
 function erstelleDashboard(opt) {
   const config = opt.config;
   const jetzt = opt.jetzt || (() => DateTime.now().setZone(config.zeitzone));
+  const anrufe = opt.anrufe || new AnrufSpeicher(':memory:');
   const sessions = new Map();
   const fehlversuche = new Map();
   const statischeDateien = Object.fromEntries(Object.entries(STATISCH).map(([pfad, [datei, typ]]) =>
@@ -275,6 +277,14 @@ function erstelleDashboard(opt) {
       return sende(res, 200, { ok: true });
     }
     if (r === 'GET /api/auslastung') return sende(res, 200, await auslastung());
+    if (r === 'GET /api/roi') {
+      const tage = Number(url.searchParams.get('tage') || 30);
+      if (![7, 30, 90].includes(tage)) throw new HttpFehler(400, 'tage muss 7, 30 oder 90 sein');
+      const bis = jetzt().startOf('day').plus({ days: 1 });
+      const von = bis.minus({ days: tage });
+      const utc = (d) => d.toUTC().toISO({ suppressMilliseconds: true });
+      return sende(res, 200, roiBerechnen(config, lib, anrufe.zeitraum(utc(von), utc(bis)), { von, bis }));
+    }
     if (r === 'GET /api/einstellungen') return sende(res, 200, einstellungen());
     if (r === 'GET /api/status') return sende(res, 200, await status());
     throw new HttpFehler(404, 'Nicht gefunden');
@@ -303,11 +313,38 @@ function erstelleDashboard(opt) {
     });
   }
 
-  async function internRueckruf(req, res) {
+  // Nur n8n (im Docker-Netz) kennt den Intern-Token; von außen blockt Caddy /intern/* zusätzlich.
+  function internPruefen(req) {
     const auth = String(req.headers.authorization || '');
     const erwartet = `Bearer ${opt.internToken || ''}`;
     const ok = opt.internToken && auth.length === erwartet.length && crypto.timingSafeEqual(Buffer.from(auth), Buffer.from(erwartet));
     if (!ok) throw new HttpFehler(401, 'Nicht berechtigt');
+  }
+
+  async function internAnruf(req, res) {
+    internPruefen(req);
+    const b = await lesen(req);
+    const id = lib.text(b.id, 100);
+    if (!/^[A-Za-z0-9_\-.:]{1,100}$/.test(id)) throw new HttpFehler(400, 'id fehlt oder ist ungültig');
+    const start = DateTime.fromISO(String(b.start || ''), { setZone: true });
+    if (!start.isValid) throw new HttpFehler(400, 'start ungültig');
+    const zahl = (wert, max) => (Number.isFinite(Number(wert)) ? Math.min(Math.max(Number(wert), 0), max) : 0);
+    const neu = anrufe.hinzufuegen({
+      id,
+      start: start.toUTC().toISO({ suppressMilliseconds: true }),
+      dauerSek: Math.round(zahl(b.dauerSek, 7200)),
+      kostenUsd: zahl(b.kostenUsd, 100),
+      endeGrund: lib.text(b.endeGrund, 80),
+      gebucht: b.gebucht === true,
+      abgesagt: b.abgesagt === true,
+      rueckruf: b.rueckruf === true,
+      weitergeleitet: b.weitergeleitet === true,
+    });
+    return sende(res, neu ? 201 : 200, { ok: true, neu });
+  }
+
+  async function internRueckruf(req, res) {
+    internPruefen(req);
     const b = await lesen(req);
     const eingegangen = DateTime.fromISO(String(b.eingegangen || ''));
     const eintrag = {
@@ -341,6 +378,7 @@ function erstelleDashboard(opt) {
         throw new HttpFehler(415, 'Content-Type application/json erforderlich');
       }
       if (req.method === 'POST' && url.pathname === '/intern/rueckruf') return await internRueckruf(req, res);
+      if (req.method === 'POST' && url.pathname === '/intern/anruf') return await internAnruf(req, res);
       if (!url.pathname.startsWith('/api/')) throw new HttpFehler(404, 'Nicht gefunden');
       if (schreibend && req.headers['x-praxis-anfrage'] !== '1') throw new HttpFehler(403, 'Anfrage abgelehnt (CSRF-Schutz)');
       if (req.method === 'POST' && url.pathname === '/api/login') return await login(req, res);
@@ -365,6 +403,7 @@ function erstelleDashboard(opt) {
   const aufraeumen = setInterval(() => {
     const grenze = jetzt().minus({ days: config.rueckrufeAufbewahrenTage }).toISO();
     opt.speicher.aufraeumen(grenze);
+    anrufe.aufraeumen(jetzt().minus({ days: config.roi.aufbewahrenTage }).toUTC().toISO({ suppressMilliseconds: true }));
     for (const [sid, s] of sessions) if (s.ablauf < Date.now()) sessions.delete(sid);
     for (const schluessel of [...fehlversuche.keys()]) gesperrt(schluessel); // entfernt abgelaufene Einträge
   }, 3600000);
@@ -383,6 +422,7 @@ function start() {
   let kalender;
   let benutzer;
   let speicher;
+  let anrufe;
 
   if (modus === 'live') {
     const fehlend = ['N8N_DASHBOARD_URL', 'N8N_DASHBOARD_TOKEN', 'DASHBOARD_INTERN_TOKEN'].filter((k) => !env[k]);
@@ -394,16 +434,19 @@ function start() {
       process.exit(1);
     }
     speicher = new RueckrufSpeicher(path.join(datenOrdner, 'rueckrufe.sqlite'));
+    anrufe = new AnrufSpeicher(path.join(datenOrdner, 'anrufe.sqlite'));
     kalender = new N8nKalender({ url: env.N8N_DASHBOARD_URL, token: env.N8N_DASHBOARD_TOKEN, gesundUrl: env.N8N_HEALTH_URL });
   } else {
     benutzer = Benutzer.demo();
     speicher = new RueckrufSpeicher(':memory:');
     speicher.demoDaten(DateTime.now().setZone(config.zeitzone));
+    anrufe = new AnrufSpeicher(':memory:');
+    anrufe.demoDaten(DateTime.now().setZone(config.zeitzone));
     kalender = new DemoKalender(config, lib);
   }
 
   const server = erstelleDashboard({
-    config, modus, kalender, benutzer, speicher, protokoll,
+    config, modus, kalender, benutzer, speicher, anrufe, protokoll,
     internToken: env.DASHBOARD_INTERN_TOKEN || (modus === 'demo' ? 'demo-intern-token' : ''),
     n8nKonfiguriert: modus === 'live',
     https: env.DASHBOARD_HTTPS === '1',

@@ -4,7 +4,7 @@ const { DateTime } = require('luxon');
 const { makeLib } = require('../src/lib');
 const basisConfig = require('../src/config');
 const { erstelleDashboard } = require('../dashboard/server');
-const { RueckrufSpeicher } = require('../dashboard/speicher');
+const { RueckrufSpeicher, AnrufSpeicher } = require('../dashboard/speicher');
 const { Benutzer } = require('../dashboard/benutzer');
 const { DemoKalender } = require('../dashboard/kalender');
 
@@ -15,10 +15,11 @@ const protokoll = [];
 
 async function starteServer(extra = {}) {
   const speicher = new RueckrufSpeicher(':memory:');
+  const anrufe = new AnrufSpeicher(':memory:');
   const benutzer = extra.benutzer || new Benutzer(null, { anna: require('../dashboard/benutzer').hashen('richtig-langes-passwort') });
   const kalender = extra.kalender || new DemoKalender(config, lib);
   const server = erstelleDashboard({
-    config, modus: 'demo', kalender, benutzer, speicher, internToken: INTERN,
+    config, modus: 'demo', kalender, benutzer, speicher, anrufe, internToken: INTERN,
     protokoll: (m) => protokoll.push(m), https: !!extra.https, ...extra,
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -45,7 +46,7 @@ async function starteServer(extra = {}) {
     if (c) cookie = c.split(';')[0];
     return r;
   };
-  return { server, speicher, kalender, rufe, anmelden, schliessen: () => new Promise((r) => server.close(r)) };
+  return { server, speicher, anrufe, kalender, rufe, anmelden, schliessen: () => new Promise((r) => server.close(r)) };
 }
 
 test('Statische Seite mit Sicherheits-Headern, API nur mit Anmeldung', async () => {
@@ -56,7 +57,7 @@ test('Statische Seite mit Sicherheits-Headern, API nur mit Anmeldung', async () 
     assert.match(seite.text, /Praxis-Dashboard/);
     assert.match(seite.headers.get('content-security-policy'), /default-src 'self'.*frame-ancestors 'none'/);
     assert.equal(seite.headers.get('x-frame-options'), 'DENY');
-    for (const pfad of ['/api/ich', '/api/termine?von=2026-09-28', '/api/rueckrufe', '/api/auslastung', '/api/einstellungen', '/api/status']) {
+    for (const pfad of ['/api/ich', '/api/termine?von=2026-09-28', '/api/rueckrufe', '/api/auslastung', '/api/roi', '/api/einstellungen', '/api/status']) {
       assert.equal((await d.rufe('GET', pfad)).status, 401, pfad);
     }
     assert.equal((await d.rufe('GET', '/etc/passwd')).status, 404);
@@ -180,6 +181,80 @@ test('Rückrufe: n8n-Endpunkt mit Token, Liste, erledigen, Aufräumen', async ()
     assert.equal(d.speicher.aufraeumen('2000-01-01T00:00:00Z'), 0, 'junge Einträge bleiben');
     assert.equal(d.speicher.aufraeumen('2999-01-01T00:00:00Z'), 1, 'alte erledigte werden gelöscht');
     assert.equal(d.speicher.zaehlen().offen, 1, 'offene bleiben immer');
+  } finally { await d.schliessen(); }
+});
+
+test('Anrufe: n8n-Endpunkt mit Token, Validierung, Duplikate', async () => {
+  const d = await starteServer();
+  try {
+    const anruf = { id: 'call-1', start: '2026-09-28T09:00:00+02:00', dauerSek: 120, kostenUsd: 0.2, endeGrund: 'customer-ended-call', gebucht: true };
+    const auth = { 'content-type': 'application/json', authorization: `Bearer ${INTERN}` };
+    assert.equal((await d.rufe('POST', '/intern/anruf', JSON.stringify(anruf), { 'content-type': 'application/json' })).status, 401);
+    assert.equal((await d.rufe('POST', '/intern/anruf', JSON.stringify({ ...anruf, id: '' }), auth)).status, 400);
+    assert.equal((await d.rufe('POST', '/intern/anruf', JSON.stringify({ ...anruf, id: 'a b<script>' }), auth)).status, 400);
+    assert.equal((await d.rufe('POST', '/intern/anruf', JSON.stringify({ ...anruf, start: 'gestern' }), auth)).status, 400);
+    const neu = await d.rufe('POST', '/intern/anruf', JSON.stringify(anruf), auth);
+    assert.equal(neu.status, 201);
+    assert.equal(neu.json.neu, true);
+    const doppelt = await d.rufe('POST', '/intern/anruf', JSON.stringify(anruf), auth);
+    assert.equal(doppelt.status, 200, 'Vapi schickt Berichte evtl. doppelt');
+    assert.equal(doppelt.json.neu, false);
+    await d.rufe('POST', '/intern/anruf', JSON.stringify({ id: 'call-2', start: '2026-09-28T10:00:00Z', dauerSek: 99999, kostenUsd: 'viel', gebucht: 'ja' }), auth);
+    const gespeichert = d.anrufe.zeitraum('2026-01-01', '2027-01-01');
+    assert.equal(gespeichert.length, 2);
+    assert.equal(gespeichert[0].start, '2026-09-28T07:00:00Z', 'als UTC gespeichert');
+    assert.deepEqual([gespeichert[1].dauerSek, gespeichert[1].kostenUsd, gespeichert[1].gebucht], [7200, 0, false], 'begrenzt, nur echtes true zählt');
+    assert.equal(d.anrufe.aufraeumen('2026-09-28T08:00:00Z'), 1, 'ältere als die Grenze werden gelöscht');
+  } finally { await d.schliessen(); }
+});
+
+test('Wirkung (ROI): Kennzahlen, Sprechzeiten, Feiertag, Zeitraum, Annahmen', async () => {
+  // Freitag, 02.10.2026, 18:00 – Donnerstag 01.10. ist hier ein Feiertag.
+  const roiConfig = { ...config, feiertage: ['2026-10-01'] };
+  const d = await starteServer({ config: roiConfig, jetzt: () => DateTime.fromISO('2026-10-02T18:00', { zone: config.zeitzone }) });
+  try {
+    const auth = { 'content-type': 'application/json', authorization: `Bearer ${INTERN}` };
+    const anrufe = [
+      { id: 'A', start: '2026-09-28T09:00:00+02:00', dauerSek: 120, kostenUsd: 0.2, gebucht: true }, // Mo, Sprechzeit
+      { id: 'B', start: '2026-09-28T20:30:00+02:00', dauerSek: 60, kostenUsd: 0.1, rueckruf: true }, // Mo abends
+      { id: 'C', start: '2026-09-29T10:00:00+02:00', dauerSek: 90, kostenUsd: 0.15, weitergeleitet: true }, // zählt nicht als Ersparnis
+      { id: 'D', start: '2026-09-30T11:00:00+02:00', dauerSek: 10, kostenUsd: 0.02 }, // zu kurz
+      { id: 'H', start: '2026-10-01T09:00:00+02:00', dauerSek: 45, kostenUsd: 0.05 }, // Feiertag → außerhalb
+      { id: 'E', start: '2026-10-02T09:00:00+02:00', dauerSek: 30, kostenUsd: 0.05, abgesagt: true }, // Fr, Sprechzeit
+      { id: 'F', start: '2026-10-03T10:00:00+02:00', dauerSek: 300, kostenUsd: 1, gebucht: true }, // morgen: außerhalb des Zeitraums
+      { id: 'G', start: '2026-09-20T10:00:00+02:00', dauerSek: 300, kostenUsd: 1, gebucht: true }, // vor dem Zeitraum
+    ];
+    for (const a of anrufe) assert.equal((await d.rufe('POST', '/intern/anruf', JSON.stringify(a), auth)).status, 201, a.id);
+
+    await d.anmelden();
+    assert.equal((await d.rufe('GET', '/api/roi?tage=5')).status, 400);
+    const r = await d.rufe('GET', '/api/roi?tage=7');
+    assert.equal(r.status, 200, r.text);
+    assert.deepEqual(r.json.zeitraum, { von: '2026-09-26', bis: '2026-10-02', tage: 7 });
+    assert.deepEqual(r.json.kennzahlen, {
+      anrufe: 6, ausserhalbSprechzeit: 2, minutenGesamt: 5.9, durchschnittSekunden: 59,
+      gebucht: 1, abgesagt: 1, rueckrufe: 1, weitergeleitet: 1,
+      alsErsparnisGezaehlt: 4, // A (3 Min.), B (2), E (1,5), H (1,75) = 8,25 Min. inkl. 1 Min. Nacharbeit
+      personalStunden: 0.1, ersparnisEuro: 3.44, kiKostenEuro: 0.52, nettoEuro: 2.91, roiFaktor: 6.6,
+    });
+    assert.equal(r.json.proTag.length, 7);
+    assert.deepEqual(r.json.proTag.find((t) => t.datum === '2026-09-28'), { datum: '2026-09-28', drinnen: 1, draussen: 1 });
+    assert.deepEqual(r.json.proTag.find((t) => t.datum === '2026-10-01'), { datum: '2026-10-01', drinnen: 0, draussen: 1 });
+    assert.equal(r.json.stundenRaster[0][9], 1, 'Montag 9 Uhr');
+    assert.equal(r.json.stundenRaster[0][20], 1, 'Montag 20 Uhr');
+    assert.equal(r.json.annahmen.stundensatzEuro, config.roi.stundensatzEuro);
+    assert.equal((await d.rufe('GET', '/api/roi?tage=30')).json.kennzahlen.anrufe, 7, '30 Tage enthalten auch G');
+  } finally { await d.schliessen(); }
+});
+
+test('Wirkung ohne Anrufe: Nullen statt Fehler, kein ROI-Faktor', async () => {
+  const d = await starteServer();
+  try {
+    await d.anmelden();
+    const k = (await d.rufe('GET', '/api/roi')).json.kennzahlen;
+    assert.equal(k.anrufe, 0);
+    assert.equal(k.durchschnittSekunden, 0);
+    assert.equal(k.roiFaktor, null);
   } finally { await d.schliessen(); }
 });
 

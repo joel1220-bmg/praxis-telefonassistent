@@ -119,7 +119,7 @@ const vorbereiten = node('Anfrage vorbereiten', 'n8n-nodes-base.code', 2, [220, 
 });
 verbinde(webhook, vorbereiten);
 
-const nachWerkzeug = weiche('Nach Werkzeug', [440, 400], 6, '$json.route');
+const nachWerkzeug = weiche('Nach Werkzeug', [440, 400], 7, '$json.route');
 verbinde(vorbereiten, nachWerkzeug);
 
 const antwort = node('Antwort an Vapi', 'n8n-nodes-base.respondToWebhook', 1.1, [1760, 400], {
@@ -192,6 +192,20 @@ verbinde(nachWerkzeug, mail, 4); verbinde(mail, dashboardSpeichern); verbinde(da
 // 5: Validierungsfehler, unbekannte Werkzeuge, andere Vapi-Nachrichten
 const direkt = codeNode('Direkte Antwort', [700, 1000], 'return [{ json: lib.direkteAntwort(vorb) }];');
 verbinde(nachWerkzeug, direkt, 5); verbinde(direkt, antwort);
+
+// 6: Anrufbericht (end-of-call-report) → nur Kennzahlen ans Dashboard (ROI-Ansicht)
+const anrufSpeichern = node('Dashboard: Anruf speichern', 'n8n-nodes-base.httpRequest', 4.2, [700, 1200], {
+  method: 'POST',
+  url: "={{ $('Anfrage vorbereiten').first().json.dashboard.url }}",
+  authentication: 'genericCredentialType',
+  genericAuthType: 'httpHeaderAuth',
+  sendBody: true,
+  specifyBody: 'json',
+  jsonBody: "={{ JSON.stringify($('Anfrage vorbereiten').first().json.dashboard.body) }}",
+  options: { timeout: 5000 },
+}, { credentials: CREDENTIALS.dashboardIntern, onError: 'continueRegularOutput', alwaysOutputData: true });
+const anrufQuittieren = node('Anruf quittieren', 'n8n-nodes-base.code', 2, [920, 1200], { jsCode: 'return [{ json: { results: [] } }];' });
+verbinde(nachWerkzeug, anrufSpeichern, 6); verbinde(anrufSpeichern, anrufQuittieren); verbinde(anrufQuittieren, antwort);
 
 speichere('praxis-telefonassistent.workflow.json', {
   id: 'PraxisTelefon001',
@@ -346,6 +360,9 @@ if (!option('--out')) {
         { type: 'endCall' },
       ],
     },
+    // Nach jedem Anruf ein Bericht an n8n (nur dieser Typ). n8n gibt daraus nur Zahlen ans Dashboard weiter.
+    server,
+    serverMessages: ['end-of-call-report'],
     voice: { provider: '11labs', model: 'eleven_multilingual_v2', voiceId: '<<ELEVENLABS_VOICE_ID>>' },
     transcriber: { provider: 'deepgram', model: 'nova-2', language: 'de' },
     artifactPlan: { recordingEnabled: false },

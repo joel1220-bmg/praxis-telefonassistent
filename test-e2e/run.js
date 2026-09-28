@@ -126,14 +126,15 @@ async function main() {
 // ---------- Dashboard (echter Server im Live-Modus gegen dieses n8n) ----------
 async function starteDashboard() {
   const { erstelleDashboard } = require('../dashboard/server');
-  const { RueckrufSpeicher } = require('../dashboard/speicher');
+  const { RueckrufSpeicher, AnrufSpeicher } = require('../dashboard/speicher');
   const { Benutzer, hashen } = require('../dashboard/benutzer');
   const { N8nKalender } = require('../dashboard/kalender');
   const config = { ...require('../src/config'), kalenderId: KALENDER };
   const speicher = new RueckrufSpeicher(':memory:');
+  const anrufe = new AnrufSpeicher(':memory:');
   const kalender = new N8nKalender({ url: `http://127.0.0.1:${PORT_N8N}/webhook/praxis-dashboard`, token: DASH_API_TOKEN });
   const server = erstelleDashboard({
-    config, modus: 'live', kalender, speicher, benutzer: new Benutzer(null, { team: hashen('e2e-passwort-lang') }),
+    config, modus: 'live', kalender, speicher, anrufe, benutzer: new Benutzer(null, { team: hashen('e2e-passwort-lang') }),
     internToken: DASH_INTERN_TOKEN, n8nKonfiguriert: true, protokoll: () => {},
   });
   await new Promise((r) => server.listen(PORT_DASHBOARD, '127.0.0.1', r));
@@ -148,7 +149,7 @@ async function starteDashboard() {
     if (c) cookie = c.split(';')[0];
     return { status: res.status, json: await res.json().catch(() => null) };
   };
-  return { server, speicher, rufe };
+  return { server, speicher, anrufe, rufe };
 }
 
 async function dashboardApi(body, token = DASH_API_TOKEN) {
@@ -206,6 +207,35 @@ async function dashboardSzenarien(d) {
   const s = (await d.rufe('GET', '/api/status')).json;
   assert.equal(s.n8n.ok, true);
   assert.equal(s.kalender.ok, true);
+
+  schritt('Anrufbericht von Vapi → n8n → Dashboard (nur Kennzahlen)');
+  const bericht = {
+    message: {
+      type: 'end-of-call-report', endedReason: 'customer-ended-call', cost: 0.31,
+      startedAt: new Date(Date.now() - 180000).toISOString(), endedAt: new Date(Date.now() - 30000).toISOString(),
+      call: { id: 'e2e-anruf-1', customer: { number: '+4917699999999' } },
+      artifact: {
+        transcript: 'User: Transkript-Geheimnis-E2E, bitte einen Termin.',
+        messages: [
+          { role: 'user', message: 'Transkript-Geheimnis-E2E' },
+          { role: 'tool_call_result', name: 'termin_buchen', result: `${buchung.ergebnis}` },
+        ],
+      },
+    },
+  };
+  const quittung = await vapi(null, null, { message: bericht });
+  assert.equal(quittung.status, 200, quittung.text);
+  assert.deepEqual(quittung.json, { results: [] });
+  const roi = await d.rufe('GET', '/api/roi?tage=7');
+  assert.equal(roi.status, 200, JSON.stringify(roi.json));
+  assert.equal(roi.json.kennzahlen.anrufe, 1, JSON.stringify(roi.json.kennzahlen));
+  assert.equal(roi.json.kennzahlen.gebucht, 1);
+  assert.equal(roi.json.kennzahlen.durchschnittSekunden, 150);
+  const gespeichert = JSON.stringify(d.anrufe.zeitraum('2000-01-01', '2999-01-01'));
+  for (const spur of ['Transkript-Geheimnis-E2E', '+4917699999999', 'Berg', 'Karl']) assert.ok(!gespeichert.includes(spur), `${spur} im Dashboard gespeichert`);
+  assert.equal((await vapi(null, null, { message: bericht })).status, 200, 'doppelter Bericht');
+  assert.equal((await d.rufe('GET', '/api/roi?tage=7')).json.kennzahlen.anrufe, 1, 'Duplikat nicht gezählt');
+  console.log(`Wirkung: ${JSON.stringify(roi.json.kennzahlen)}`);
 
   schritt('Absage im Dashboard löscht den Termin im Kalender');
   const abgesagt = await d.rufe('POST', '/api/termine/absagen', { id: tel.id });
@@ -348,7 +378,7 @@ async function szenarien() {
 async function datenschutzPruefen() {
   schritt('Keine Anfragedaten (Token, Patientendaten) bleiben in der n8n-Datenbank');
   const { DatabaseSync } = require('node:sqlite');
-  const spuren = ['e2e-geheim-123', 'Ramipril', 'Berg', '1980-05-17'];
+  const spuren = ['e2e-geheim-123', 'Ramipril', 'Berg', '1980-05-17', 'Transkript-Geheimnis-E2E', '+4917699999999'];
   let stand = null;
   for (let i = 0; i < 40; i++) {
     const db = new DatabaseSync(path.join(ORDNER, '.n8n', 'database.sqlite'), { readOnly: true });
