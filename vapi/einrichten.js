@@ -5,6 +5,7 @@
 //   Assistenten-ID werden in lokal/daten/vapi.json gemerkt, spätere Aufrufe aktualisieren nur.
 //
 // Server:  N8N_WEBHOOK_URL + VAPI_CREDENTIAL_ID (+ VAPI_ASSISTANT_ID zum Aktualisieren) setzen, dann ohne --lokal.
+//          Statt VAPI_CREDENTIAL_ID geht VAPI_WEBHOOK_TOKEN (aus docker/.env): dann wird die Credential angelegt.
 // Probelauf ohne API-Aufruf: --nur-datei
 //
 // Optional: PRAXIS_TELEFON       Nummer für Weiterleitungen; ohne sie gibt es kein Weiterleiten (gut für Tests)
@@ -57,12 +58,14 @@ function einstellungen() {
       merken: (werte) => fs.writeFileSync(path.join(LOKAL, 'vapi.json'), JSON.stringify({ ...gemerkt, ...werte }, null, 2)),
     };
   }
-  const fehlend = ['N8N_WEBHOOK_URL', 'VAPI_CREDENTIAL_ID'].filter((k) => !process.env[k]);
+  const fehlend = ['N8N_WEBHOOK_URL'].filter((k) => !process.env[k]);
+  if (!process.env.VAPI_CREDENTIAL_ID && !process.env.VAPI_WEBHOOK_TOKEN) fehlend.push('VAPI_CREDENTIAL_ID oder VAPI_WEBHOOK_TOKEN');
   if (fehlend.length) abbruch(`Fehlende Umgebungsvariablen: ${fehlend.join(', ')} (für den lokalen Test stattdessen --lokal verwenden)`);
   return {
     webhook: process.env.N8N_WEBHOOK_URL,
     credentialId: process.env.VAPI_CREDENTIAL_ID,
     assistantId: process.env.VAPI_ASSISTANT_ID,
+    token: process.env.VAPI_WEBHOOK_TOKEN,
     merken: () => {},
   };
 }
@@ -76,14 +79,19 @@ async function credentialAnlegen(token) {
     authenticationPlan: { type: 'bearer', token, headerName: 'Authorization', bearerPrefixEnabled: true },
   });
   if (r.ok && r.json && r.json.id) return r.json.id;
+  if (r.status === 401) abbruch(`Vapi lehnt den API-Key ab (HTTP 401): ${r.text.slice(0, 300)}\nBitte den PRIVATE Key aus dashboard.vapi.ai → API Keys verwenden.`);
   abbruch([
     `Vapi hat das automatische Anlegen abgelehnt (HTTP ${r.status}): ${r.text.slice(0, 400)}`,
     '',
     'Dann bitte von Hand (einmalig):',
     '  1. dashboard.vapi.ai → Einstellungen/Integrations → "Custom Credential" hinzufügen',
-    '  2. Typ "Bearer Token", Name beliebig, Token = Wert "vapiToken" aus lokal/daten/geheim.json',
-    '  3. Die angezeigte ID kopieren und in PowerShell setzen:  $env:VAPI_CREDENTIAL_ID="<ID>"',
-    '  4. node vapi/einrichten.js --lokal  erneut ausführen',
+    lokal
+      ? '  2. Typ "Bearer Token", Name beliebig, Token = Wert "vapiToken" aus lokal/daten/geheim.json'
+      : '  2. Typ "Bearer Token", Name beliebig, Token = Wert VAPI_WEBHOOK_TOKEN aus docker/.env auf dem Server',
+    lokal
+      ? '  3. Die angezeigte ID kopieren und in PowerShell setzen:  $env:VAPI_CREDENTIAL_ID="<ID>"'
+      : '  3. Die angezeigte ID als VAPI_CREDENTIAL_ID=<ID> in docker/.env eintragen',
+    lokal ? '  4. node vapi/einrichten.js --lokal  erneut ausführen' : '  4. docker/vapi-einrichten.sh erneut ausführen',
   ].join('\n'));
 }
 
@@ -131,10 +139,10 @@ async function main() {
   }
   let credentialId = e.credentialId;
   if (!credentialId) {
-    if (!lokal) abbruch('VAPI_CREDENTIAL_ID fehlt.');
     credentialId = await credentialAnlegen(e.token);
     e.merken({ credentialId });
     console.log(`Credential angelegt: ${credentialId}`);
+    if (!lokal) console.log('Für spätere Aufrufe merken (keine Geheimnisse):  VAPI_CREDENTIAL_ID=' + credentialId);
   }
   const assistent = assistentBauen(e.webhook, credentialId);
   let r = e.assistantId ? await vapi('PATCH', `/assistant/${encodeURIComponent(e.assistantId)}`, assistent) : null;

@@ -135,6 +135,11 @@ node vapi/einrichten.js
 ```
 5. In the dashboard, assign the assistant to the phone number. Test it first with the **web call** in the dashboard, then with a real call.
 
+**Shortcut on the server (Docker setup):** steps 1, 4 and 5 in one command. It asks once for the Vapi **Private** API key (invisible input, checked against Vapi before saving) and stores it in `docker/.env` (mode 600). The credential is created from `VAPI_WEBHOOK_TOKEN` in `.env`, so the token never leaves the server. Set `VAPI_ASSISTANT_ID` / `VAPI_NUMMER_ID` in `.env` to reuse an existing assistant and number; the IDs of new ones are saved automatically. Optional in `.env`: `PRAXIS_TELEFON`, `ELEVENLABS_VOICE_ID`, `VAPI_MODELL`.
+```bash
+ssh -t root@<server> /opt/praxis/docker/vapi-einrichten.sh
+```
+
 **Model:** `claude-sonnet-5`. Vapi does not offer `claude-opus-5` (as of 09/2026). For even shorter pauses, run `vapi/einrichten.js` with `VAPI_MODELL=claude-haiku-4-5-20251001`. If a model name is invalid, Vapi lists the allowed names in its error message.
 
 ## Tests
