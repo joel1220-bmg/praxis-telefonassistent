@@ -51,7 +51,7 @@ set -a; . ./.env; set +a
 
 ausgabe=$(docker compose run --rm -T -v "$(cd .. && pwd)/vapi:/app/vapi:ro" \
   -e VAPI_API_KEY -e VAPI_WEBHOOK_TOKEN -e VAPI_CREDENTIAL_ID -e VAPI_ASSISTANT_ID -e VAPI_NUMMER_ID \
-  -e PRAXIS_TELEFON -e ELEVENLABS_VOICE_ID -e VAPI_MODELL \
+  -e PRAXIS_TELEFON -e ELEVENLABS_VOICE_ID -e ELEVENLABS_MODELL -e VAPI_MODELL -e VAPI_MODELL_ANBIETER \
   -e N8N_WEBHOOK_URL="https://$N8N_DOMAIN/webhook/vapi-praxis" \
   dashboard node vapi/einrichten.js 2>&1) && ok=1 || ok=0
 echo "$ausgabe"

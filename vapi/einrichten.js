@@ -13,6 +13,8 @@
 //                                Bibliotheksstimmen gehen nur mit bezahltem ElevenLabs-Plan und ElevenLabs-Key in Vapi
 //           VAPI_NUMMER_ID       ID einer Vapi-Telefonnummer; wird mit dem Assistenten verknüpft (lokal gemerkt)
 //           VAPI_MODELL          anderes Claude-Modell, z. B. claude-haiku-4-5-20251001 (schneller, günstiger); Vapi nennt bei ungültigen Werten die erlaubte Liste
+//           VAPI_MODELL_ANBIETER z. B. openrouter (mit VAPI_MODELL=anthropic/claude-sonnet-5.5); OpenRouter-Key vorher in Vapi unter Integrations hinterlegen
+//           ELEVENLABS_MODELL    Stimmmodell zu ELEVENLABS_VOICE_ID, Standard eleven_flash_v2_5 (schnell), eleven_v3 klingt lebendiger, antwortet aber langsamer
 const fs = require('fs');
 const path = require('path');
 
@@ -117,9 +119,14 @@ function assistentBauen(webhook, credentialId) {
     assistent.model.messages[0].content = prompt;
     console.log('Hinweis: PRAXIS_TELEFON nicht gesetzt – Weiterleiten ist deaktiviert.');
   }
+  if (process.env.VAPI_MODELL_ANBIETER) assistent.model.provider = process.env.VAPI_MODELL_ANBIETER;
   if (process.env.VAPI_MODELL) assistent.model.model = process.env.VAPI_MODELL;
   if (process.env.ELEVENLABS_VOICE_ID) {
-    assistent.voice = { provider: '11labs', model: 'eleven_flash_v2_5', voiceId: process.env.ELEVENLABS_VOICE_ID };
+    // Etwas weniger Stabilität und etwas Stil: klingt am Telefon lebendiger und weniger "trocken".
+    assistent.voice = {
+      provider: '11labs', model: process.env.ELEVENLABS_MODELL || 'eleven_flash_v2_5', voiceId: process.env.ELEVENLABS_VOICE_ID,
+      stability: 0.3, similarityBoost: 0.8, style: 0.4, useSpeakerBoost: true,
+    };
   }
   // Lokaler Test: selbst erzeugtes Intro (Beat + Begrüßung) statt gesprochener Begrüßung, falls vorhanden.
   if (lokal && fs.existsSync(path.join(LOKAL, 'begruessung.wav'))) {

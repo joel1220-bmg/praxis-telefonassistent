@@ -63,7 +63,8 @@ sequenceDiagram
 
 | Part | Where |
 |---|---|
-| Voice agent | Vapi, model `claude-sonnet-5`, German prompt ([`vapi/system-prompt.de.md`](vapi/system-prompt.de.md)), US test number |
+| Voice agent | Vapi: Claude Sonnet 5.5 via OpenRouter, ElevenLabs voice "Nadine" (German, `eleven_v3`), Deepgram `nova-3`; German prompt ([`vapi/system-prompt.de.md`](vapi/system-prompt.de.md)), US test number |
+| How it was chosen | Variants measured on real phone calls (Vapi latency metrics per turn): Sonnet 5 + multilingual voice ≈ 4.0 s, Sonnet 5.5 + Flash voice ≈ 3.2 s, v3 voice slower but clearly more natural. The repo defaults (Sonnet 5, Azure voice "Seraphina") need no extra accounts; the live setup is reproduced with `VAPI_MODELL_ANBIETER=openrouter VAPI_MODELL=anthropic/claude-sonnet-5.5 ELEVENLABS_VOICE_ID=XFigb6fqZPxl2Q2dFOXN ELEVENLABS_MODELL=eleven_v3` |
 | Workflows | n8n 2.40.7 on a Hetzner CX23 (Falkenstein, ~7 €/month), Docker Compose |
 | Calendar | Google Calendar through a service account |
 | Dashboard | Node server behind Caddy/HTTPS, personal logins |
@@ -209,7 +210,7 @@ node vapi/einrichten.js
 ```
 5. In the dashboard, assign the assistant to the phone number. Test it first with the **web call** in the dashboard, then with a real call.
 
-**Shortcut on the server (Docker setup):** steps 1, 4 and 5 in one command. It asks once for the Vapi **Private** API key (invisible input, checked against Vapi before saving) and stores it in `docker/.env` (mode 600). The credential is created from `VAPI_WEBHOOK_TOKEN` in `.env`, so the token never leaves the server. Set `VAPI_ASSISTANT_ID` / `VAPI_NUMMER_ID` in `.env` to reuse an existing assistant and number; the IDs of new ones are saved automatically. Optional in `.env`: `PRAXIS_TELEFON`, `ELEVENLABS_VOICE_ID`, `VAPI_MODELL`.
+**Shortcut on the server (Docker setup):** steps 1, 4 and 5 in one command. It asks once for the Vapi **Private** API key (invisible input, checked against Vapi before saving) and stores it in `docker/.env` (mode 600). The credential is created from `VAPI_WEBHOOK_TOKEN` in `.env`, so the token never leaves the server. Set `VAPI_ASSISTANT_ID` / `VAPI_NUMMER_ID` in `.env` to reuse an existing assistant and number; the IDs of new ones are saved automatically. Optional in `.env`: `PRAXIS_TELEFON`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODELL`, `VAPI_MODELL`, `VAPI_MODELL_ANBIETER`.
 ```bash
 ssh -t root@<server> /opt/praxis/docker/vapi-einrichten.sh
 ```
