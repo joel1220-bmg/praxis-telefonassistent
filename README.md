@@ -78,6 +78,8 @@ Patients call the practice number. A German-speaking AI assistant picks up and c
 
 - **find free appointments** based on opening hours, the Google Calendar, holidays and vacation
 - **book appointments**, with a server-side re-check so nothing gets double-booked
+- **recognise returning patients**: it first asks "Waren Sie schon einmal bei uns?"; for returning patients only name and date of birth are needed, and phone and insurance are taken from their last appointment
+- **recover from failed tool calls**: if the language model sends an empty booking, the backend asks for all fields again; after two failed attempts it stops retrying and takes a callback request instead, so a caller never ends up in a loop
 - **find, reschedule and cancel appointments**, after checking last name and date of birth
 - **take callback requests** (prescriptions, referrals, results, sick notes) and e-mail them to the front desk
 - **transfer the caller to the practice team** during opening hours
@@ -213,6 +215,15 @@ ssh -t root@<server> /opt/praxis/docker/vapi-einrichten.sh
 ```
 
 **Model:** `claude-sonnet-5`. Vapi does not offer `claude-opus-5` (as of 09/2026). For even shorter pauses, run `vapi/einrichten.js` with `VAPI_MODELL=claude-haiku-4-5-20251001`. If a model name is invalid, Vapi lists the allowed names in its error message.
+
+**Speech recognition:** Deepgram `nova-3` (German) with a `keyterm` list (insurance types, appointment types) built from `src/config.js`. With `nova-2`, "privat" was sometimes transcribed as "Prima".
+
+### 6. Demo appointments (optional)
+`scripts/demo-termine.js` fills the practice calendar with realistic, clearly fictional appointments: 90 days of history (so the assistant recognises returning patients) and the next 28 days, fuller in the coming days and emptier later, always leaving free slots for test calls. Every demo event carries the private property `demo=1`.
+```bash
+node scripts/demo-termine.js --vorschau
+```
+`--einspielen` writes them (needs `GOOGLE_SA_DATEI`, a service-account JSON with write access to the calendar), `--entfernen` deletes all events with `demo=1`. Test person for calls as a returning patient: **Erika Mustermann, born 12.08.1964**.
 
 ## Tests
 

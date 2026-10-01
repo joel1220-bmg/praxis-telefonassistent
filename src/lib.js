@@ -235,6 +235,46 @@ function makeLib(DateTime) {
     return { method: 'GET', url: kalenderUrl(config, `/events?${q}`), body: {} };
   }
 
+  // Alle Termine (vergangen und zukünftig, jede Quelle) zu einem Geburtsdatum: für die Prüfung offener Termine
+  // und um bei Bestandspatienten Telefon und Versicherung aus dem letzten Termin zu übernehmen.
+  const HISTORIE_MONATE = 24;
+  function patientenHistorieRequest(config, gebdat, jetzt) {
+    const q = [
+      `privateExtendedProperty=${encodeURIComponent(`gebdat=${gebdat}`)}`,
+      `timeMin=${encodeURIComponent(isoOhneMs(jetzt.minus({ months: HISTORIE_MONATE })))}`,
+      'singleEvents=true',
+      'orderBy=startTime',
+      'maxResults=250',
+    ].join('&');
+    return { method: 'GET', url: kalenderUrl(config, `/events?${q}`), body: {} };
+  }
+
+  function patientHistorie(config, antwort, nachname) {
+    if (!antwort || antwort.error) throw new Error('Kalenderabfrage fehlgeschlagen');
+    const code = nameCode(nachname);
+    return (antwort.items || [])
+      .filter((e) => e.status !== 'cancelled' && e.start && e.start.dateTime)
+      .filter((e) => ((e.extendedProperties || {}).private || {}).nachnameCode === code)
+      .map((e) => ({
+        id: e.id,
+        start: zeit(config, e.start.dateTime),
+        ende: zeit(config, (e.end && e.end.dateTime) || e.start.dateTime),
+        summary: e.summary || '',
+        beschreibung: e.description || '',
+        quelle: ((e.extendedProperties || {}).private || {}).quelle || '',
+      }));
+  }
+
+  // Telefon und Versicherung aus dem jüngsten Termin mit diesen Angaben.
+  function stammdaten(historie) {
+    for (const t of [...historie].sort((a, b) => b.start.toMillis() - a.start.toMillis())) {
+      const tel = (t.beschreibung.match(/^Telefon:\s*(\+?[0-9 ]{6,20})\s*$/m) || [])[1];
+      const vers = (t.beschreibung.match(/^Versicherung:\s*([a-zäöü]+)/im) || [])[1];
+      if (tel) return { telefon: tel.replace(/\s/g, ''), versicherung: VERSICHERUNGEN.includes(String(vers).toLowerCase()) ? vers.toLowerCase() : '' };
+    }
+    return null;
+  }
+
   function patientTermine(config, antwort, nachname) {
     if (!antwort || antwort.error) throw new Error('Kalenderabfrage fehlgeschlagen');
     const code = nameCode(nachname);
@@ -248,6 +288,14 @@ function makeLib(DateTime) {
 
   function antwort(toolCallId, ergebnis) {
     return { results: [{ toolCallId, result: ergebnis }] };
+  }
+
+  const MAX_FEHLVERSUCHE = 2;
+
+  // Zählt Werkzeug-Ergebnisse "Fehler: ..." für dieses Werkzeug im bisherigen Gesprächsverlauf.
+  function fehlversuche(nachricht, tool) {
+    const verlauf = ((nachricht.artifact || {}).messages) || [];
+    return verlauf.filter((m) => m && m.role === 'tool_call_result' && m.name === tool && /^Fehler/.test(String(m.result || ''))).length;
   }
 
   function argumenteLesen(roh) {
@@ -281,6 +329,14 @@ function makeLib(DateTime) {
     if (!(tool in TOOL_ROUTE)) {
       return { ...basis, route: ROUTE.direkt, antwort: antwort(toolCallId, `Unbekanntes Werkzeug: ${text(tool, 60)}`) };
     }
+    // Schleifenschutz: Nach zwei gescheiterten Buchungsversuchen im selben Gespräch nicht weiter probieren lassen,
+    // sondern auf einen Rückruf umlenken. Vapi schickt den bisherigen Verlauf in message.artifact.messages mit.
+    if (tool === 'termin_buchen' && fehlversuche(nachricht, tool) >= MAX_FEHLVERSUCHE) {
+      return { ...basis, route: ROUTE.direkt, antwort: antwort(toolCallId,
+        'STOPP: Die Buchung ist in diesem Gespräch mehrfach gescheitert. Rufe termin_buchen nicht noch einmal auf. '
+        + 'Entschuldige dich kurz, ohne Technisches zu nennen, und nimm mit rueckruf_notieren einen Rückrufwunsch auf '
+        + '(kategorie termin, Anliegen: gewünschter Termin mit Tag und Uhrzeit). Während der Sprechzeiten kannst du stattdessen weiterverbinden.') };
+    }
     try {
       return { ...basis, route: TOOL_ROUTE[tool], ...VORBEREITUNG[tool](config, args, jetzt, anrufer) };
     } catch (e) {
@@ -311,10 +367,19 @@ function makeLib(DateTime) {
     },
 
     termin_buchen(config, args, jetzt, anrufer) {
+      // Kommt in seltenen Fällen vom Sprachmodell ohne jede Angabe an. Dann gezielt alles neu anfordern,
+      // statt nur das erste fehlende Feld zu nennen (sonst wiederholt das Modell denselben leeren Aufruf).
+      if (!Object.keys(args).length) {
+        throw new Eingabefehler('termin_buchen kam ohne Angaben an (leere Argumente, Übertragungsproblem). Nichts gebucht. '
+          + 'Rufe termin_buchen genau einmal erneut auf und übergib alle Angaben aus dem Gespräch: terminart, start, vorname, '
+          + 'nachname, geburtsdatum, bestandspatient (bei neuen Personen auch versicherung und telefon). Frag den Anrufer dafür nichts erneut.');
+      }
       const art = terminart(config, args.terminart);
       const start = zeit(config, text(args.start, 40));
       if (!start.isValid) throw new Eingabefehler('start fehlt. Zuerst freie_termine_suchen aufrufen und den genauen start-Wert verwenden.');
       const ende = start.plus({ minutes: art.dauer });
+      // Bestandspatienten: Telefon und Versicherung kommen aus früheren Terminen (siehe buchungPruefen).
+      const bestand = args.bestandspatient === true || args.bestandspatient === 'true';
       const buchung = {
         terminart: art.schluessel,
         start: isoOhneMs(start),
@@ -322,8 +387,10 @@ function makeLib(DateTime) {
         vorname: name(args.vorname, 'Vorname'),
         nachname: name(args.nachname, 'Nachname'),
         geburtsdatum: geburtsdatum(args.geburtsdatum, jetzt),
-        telefon: telefon(args.telefon, anrufer),
-        versicherung: auswahl(args.versicherung, VERSICHERUNGEN, 'versicherung', 'unbekannt'),
+        bestandspatient: bestand,
+        telefon: bestand ? (text(args.telefon, 30) ? telefon(args.telefon) : '') : telefon(args.telefon, anrufer),
+        anrufer: bestand ? text(anrufer, 30) : '',
+        versicherung: bestand && !text(args.versicherung, 30) ? '' : auswahl(args.versicherung, VERSICHERUNGEN, 'versicherung', 'unbekannt'),
         anliegen: text(args.anliegen, 200),
       };
       if (!istGueltigerSlot(config, start, art.dauer, jetzt)) {
@@ -332,7 +399,7 @@ function makeLib(DateTime) {
       return {
         buchung,
         http: freeBusyRequest(config, start, ende),
-        http2: patientenTermineRequest(config, buchung.geburtsdatum, jetzt),
+        http2: patientenHistorieRequest(config, buchung.geburtsdatum, jetzt),
       };
     },
 
@@ -419,15 +486,29 @@ function makeLib(DateTime) {
       + 'Nenne nur diese Termine, ohne den start-Wert vorzulesen. Für termin_buchen den start-Wert exakt übernehmen.');
   }
 
-  function buchungPruefen(config, vorb, freeBusyAntwort, bestehendeAntwort) {
-    const b = vorb.buchung;
+  function buchungPruefen(config, vorb, freeBusyAntwort, historieAntwort) {
+    const b = { ...vorb.buchung };
+    const jetzt = zeit(config, vorb.jetzt);
     let belegt;
-    let bestehende;
+    let historie;
     try {
       belegt = belegungLesen(config, freeBusyAntwort);
-      bestehende = patientTermine(config, bestehendeAntwort, b.nachname);
+      historie = patientHistorie(config, historieAntwort, b.nachname);
     } catch (e) {
       return { ok: false, antwort: antwort(vorb.toolCallId, 'Technischer Fehler beim Kalender. Termin wurde NICHT gebucht. Biete einen Rückruf an.') };
+    }
+    // Offene Termine zählen nur, wenn der Telefonassistent sie gebucht hat (wie bisher).
+    const bestehende = historie.filter((t) => t.quelle === QUELLE && t.ende > jetzt);
+    if (b.bestandspatient) {
+      const stamm = stammdaten(historie);
+      if (!stamm) {
+        return { ok: false, antwort: antwort(vorb.toolCallId,
+          'Nicht gebucht: Zu diesem Namen und Geburtsdatum sind keine Patientendaten hinterlegt. Frag, ob Nachname (buchstabieren lassen) '
+          + 'und Geburtsdatum stimmen, und rufe termin_buchen dann erneut auf. Ist die Person doch neu: Versicherungsart und '
+          + 'Rückrufnummer erfragen und termin_buchen mit bestandspatient=false aufrufen.') };
+      }
+      b.telefon = b.telefon || stamm.telefon || b.anrufer;
+      b.versicherung = b.versicherung || stamm.versicherung || 'unbekannt';
     }
     const start = zeit(config, b.start);
     const schonGebucht = bestehende.find((t) => t.start.toMillis() === start.toMillis());
@@ -449,6 +530,7 @@ function makeLib(DateTime) {
       `Telefon: ${b.telefon}`,
       `Versicherung: ${b.versicherung}`,
       b.anliegen ? `Anliegen: ${b.anliegen}` : null,
+      b.bestandspatient ? 'Bestandspatient: Telefon und Versicherung aus früherem Termin übernommen.' : null,
       '',
       `Gebucht vom Telefonassistenten am ${zeit(config, vorb.jetzt).setLocale('de').toFormat("dd.LL.yyyy, HH:mm 'Uhr'")}.`,
     ].filter((z) => z !== null).join('\n');
@@ -473,9 +555,12 @@ function makeLib(DateTime) {
       return antwort(vorb.toolCallId, 'Technischer Fehler: Termin wurde NICHT gebucht. Biete einen Rückruf an.');
     }
     const start = zeit(config, vorb.buchung.start);
+    // Bei Bestandspatienten die übernommene Nummer nur über die letzten zwei Ziffern nennen (keine vollständigen Daten vorlesen).
+    const tel = vorb.buchung.bestandspatient && ((eventAntwort.description || '').match(/^Telefon:\s*(\S+)/m) || [])[1];
     return antwort(vorb.toolCallId,
       `Gebucht: ${config.terminarten[vorb.buchung.terminart].bezeichnung} am ${sprechZeit(start)} für ${vorb.buchung.vorname} ${vorb.buchung.nachname}. `
-      + `Termin-ID: ${eventAntwort.id}. Bestätige Datum und Uhrzeit und erinnere an die Versichertenkarte.`);
+      + `Termin-ID: ${eventAntwort.id}. Bestätige Datum und Uhrzeit und erinnere an die Versichertenkarte.`
+      + (tel ? ` Sag dazu, dass die Praxis für Rückfragen die hinterlegte Nummer mit der Endung ${tel.slice(-2).split('').join(' ')} nutzt.` : ''));
   }
 
   function nachFinden(config, vorb, listeAntwort) {

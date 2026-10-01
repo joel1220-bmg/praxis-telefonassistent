@@ -155,6 +155,56 @@ test('Buchen: Prüfung vor dem Eintragen', () => {
   assert.match(ergebnis(lib.nachBuchung(config, vorb, { error: {} })), /NICHT gebucht/);
 });
 
+test('Buchen: Schleifenschutz bei leeren Argumenten und wiederholten Fehlern', () => {
+  const leer = lib.vorbereiten(config, vapi('termin_buchen', {}), JETZT);
+  assert.equal(leer.route, lib.ROUTE.direkt);
+  assert.match(ergebnis(leer.antwort), /^Fehler: termin_buchen kam ohne Angaben an.*alle Angaben/);
+
+  const verlauf = (n) => ({ artifact: { messages: [
+    { role: 'tool_call_result', name: 'freie_termine_suchen', result: 'Fehler: terminart muss ...' },
+    ...Array.from({ length: n }, () => ({ role: 'tool_call_result', name: 'termin_buchen', result: 'Fehler: terminart muss ...' })),
+    { role: 'tool_call_result', name: 'termin_buchen', result: 'Dieser Termin ist inzwischen vergeben. Nicht gebucht.' },
+  ] } });
+  const einmal = lib.vorbereiten(config, vapi('termin_buchen', buchungsArgs, verlauf(1)), JETZT);
+  assert.equal(einmal.route, lib.ROUTE.buchen, 'ein Fehlversuch: noch einmal versuchen dürfen');
+  const zweimal = lib.vorbereiten(config, vapi('termin_buchen', buchungsArgs, verlauf(2)), JETZT);
+  assert.equal(zweimal.route, lib.ROUTE.direkt);
+  assert.match(ergebnis(zweimal.antwort), /^STOPP.*rueckruf_notieren/);
+});
+
+test('Buchen: Bestandspatient übernimmt Telefon und Versicherung aus früherem Termin', () => {
+  const args = { terminart: 'kontrolle', start: '2026-09-28T08:30:00+02:00', vorname: 'Anna', nachname: 'Meier', geburtsdatum: '1980-05-17', bestandspatient: true };
+  const ohneAnrufer = { message: { ...vapi('termin_buchen', args).message, call: {} } };
+  const vorb = lib.vorbereiten(config, ohneAnrufer, JETZT);
+  assert.equal(vorb.route, lib.ROUTE.buchen, 'kein Telefon nötig');
+  assert.match(vorb.http2.url, /privateExtendedProperty=gebdat%3D1980-05-17&timeMin=2024-09-28/);
+  assert.doesNotMatch(vorb.http2.url, /quelle/, 'auch Termine, die das Praxisteam eingetragen hat');
+
+  const frueher = (start, beschreibung, nachname = 'Mayer') => ({
+    id: `e${start.slice(0, 10)}`, status: 'confirmed', summary: 'Kontrolltermin: X', description: beschreibung,
+    start: { dateTime: start }, end: { dateTime: start },
+    extendedProperties: { private: { gebdat: '1980-05-17', nachnameCode: lib.koelnerPhonetik(nachname) } },
+  });
+  const historie = { items: [
+    frueher('2025-03-01T09:00:00+01:00', 'Terminart: Kontrolltermin\nTelefon: +491701111111\nVersicherung: gesetzlich'),
+    frueher('2026-06-10T09:00:00+02:00', 'Terminart: Akutsprechstunde\nTelefon: +49 151 2222 2222\nVersicherung: privat'),
+    frueher('2026-07-01T09:00:00+02:00', 'Terminart: Akutsprechstunde\nTelefon: +491703333333', 'Schulz'),
+  ] };
+  const ok = lib.buchungPruefen(config, vorb, freeBusy([]), historie);
+  assert.equal(ok.ok, true);
+  assert.match(ok.http.body.description, /Telefon: \+4915122222222\nVersicherung: privat/, 'jüngster Termin derselben Person');
+  assert.match(ok.http.body.description, /Bestandspatient/);
+  assert.match(ergebnis(lib.nachBuchung(config, vorb, { id: 'neu1', description: ok.http.body.description })), /Endung 2 2/);
+
+  const unbekannt = lib.buchungPruefen(config, vorb, freeBusy([]), { items: [] });
+  assert.equal(unbekannt.ok, false);
+  assert.match(ergebnis(unbekannt.antwort), /^Nicht gebucht: .*keine Patientendaten.*bestandspatient=false/);
+
+  const neu = lib.vorbereiten(config, vapi('termin_buchen', { ...args, bestandspatient: false }), JETZT);
+  assert.equal(neu.buchung.telefon, '+4915112345678', 'neue Person: wie bisher Anrufernummer');
+  assert.equal(neu.buchung.versicherung, 'unbekannt');
+});
+
 test('Finden und Absagen mit phonetischem Namensabgleich', () => {
   const eintrag = {
     id: 'evt12345', status: 'confirmed', summary: 'Kontrolltermin: Meier, Anna', start: { dateTime: '2026-10-01T09:00:00+02:00' },

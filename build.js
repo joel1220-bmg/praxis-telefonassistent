@@ -328,10 +328,11 @@ if (!option('--out')) {
           terminart: terminartParam,
           start: s('string', 'Exakter start-Wert aus freie_termine_suchen.'),
           ...personParams,
-          telefon: s('string', 'Rückrufnummer. Leer lassen, wenn die Anrufernummer bestätigt wurde.'),
-          versicherung: s('string', 'Versicherungsart.', { enum: ['gesetzlich', 'privat', 'selbstzahler', 'unbekannt'] }),
+          bestandspatient: s('boolean', 'true, wenn die Person schon einmal in der Praxis war. Dann telefon und versicherung weglassen: sie werden aus früheren Terminen übernommen.'),
+          telefon: s('string', 'Nur bei neuen Personen: Rückrufnummer. Leer lassen, wenn die Anrufernummer bestätigt wurde.'),
+          versicherung: s('string', 'Nur bei neuen Personen: Versicherungsart.', { enum: ['gesetzlich', 'privat', 'selbstzahler', 'unbekannt'] }),
           anliegen: s('string', 'Anliegen in wenigen Worten, keine Details.'),
-        }, ['terminart', 'start', 'vorname', 'nachname', 'geburtsdatum'], 'Einen Moment, ich trage den Termin ein.'),
+        }, ['terminart', 'start', 'vorname', 'nachname', 'geburtsdatum', 'bestandspatient'], 'Einen Moment, ich trage den Termin ein.'),
         tool('termine_finden', 'Findet zukünftige Termine einer Person (nur über den Telefonassistenten gebuchte).', {
           nachname: personParams.nachname,
           geburtsdatum: personParams.geburtsdatum,
@@ -364,7 +365,15 @@ if (!option('--out')) {
     server,
     serverMessages: ['end-of-call-report'],
     voice: { provider: '11labs', model: 'eleven_multilingual_v2', voiceId: '<<ELEVENLABS_VOICE_ID>>' },
-    transcriber: { provider: 'deepgram', model: 'nova-2', language: 'de' },
+    // nova-3 erkennt deutsche Telefonate besser als nova-2; keyterm hebt Wörter hervor, die im Gespräch zählen
+    // (z. B. wurde "privat" mit nova-2 als "Prima" erkannt).
+    transcriber: {
+      provider: 'deepgram',
+      model: 'nova-3',
+      language: 'de',
+      keyterm: ['privat', 'gesetzlich', 'Selbstzahler', 'Geburtsdatum', 'Rückruf', 'Überweisung', 'Rezept', 'Krankschreibung',
+        ...Object.values(config.terminarten).map((a) => a.bezeichnung)],
+    },
     artifactPlan: { recordingEnabled: false },
     compliancePlan: { hipaaEnabled: true },
     endCallPhrases: ['Auf Wiederhören'],
