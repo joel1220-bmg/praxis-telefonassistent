@@ -9,13 +9,13 @@
 // Probelauf ohne API-Aufruf: --nur-datei
 //
 // Optional: PRAXIS_TELEFON       Nummer für Weiterleitungen; ohne sie gibt es kein Weiterleiten (gut für Tests)
-//           ELEVENLABS_VOICE_ID  Stimme; ohne Angabe eine Standardstimme, die per Multilingual-Modell Deutsch spricht
+//           ELEVENLABS_VOICE_ID  eigene ElevenLabs-Stimme (Flash v2.5); ohne Angabe die deutsche Azure-Stimme aus build.js.
+//                                Bibliotheksstimmen gehen nur mit bezahltem ElevenLabs-Plan und ElevenLabs-Key in Vapi
 //           VAPI_NUMMER_ID       ID einer Vapi-Telefonnummer; wird mit dem Assistenten verknüpft (lokal gemerkt)
 //           VAPI_MODELL          anderes Claude-Modell, z. B. claude-haiku-4-5-20251001 (schneller, günstiger); Vapi nennt bei ungültigen Werten die erlaubte Liste
 const fs = require('fs');
 const path = require('path');
 
-const STANDARD_STIMME = '21m00Tcm4TlvDq8ikWAM'; // ElevenLabs-Standardstimme "Rachel"; besser: deutsche Stimme aus der Voice Library
 const VAPI = 'https://api.vapi.ai';
 const LOKAL = path.join(__dirname, '..', 'lokal', 'daten');
 const argv = process.argv.slice(2);
@@ -101,7 +101,6 @@ function assistentBauen(webhook, credentialId) {
   const werte = {
     N8N_WEBHOOK_URL: webhook,
     VAPI_CREDENTIAL_ID: credentialId,
-    ELEVENLABS_VOICE_ID: process.env.ELEVENLABS_VOICE_ID || STANDARD_STIMME,
     PRAXIS_TELEFON: process.env.PRAXIS_TELEFON || '',
   };
   for (const [k, v] of Object.entries(werte)) json = json.split(`<<${k}>>`).join(v);
@@ -119,6 +118,9 @@ function assistentBauen(webhook, credentialId) {
     console.log('Hinweis: PRAXIS_TELEFON nicht gesetzt – Weiterleiten ist deaktiviert.');
   }
   if (process.env.VAPI_MODELL) assistent.model.model = process.env.VAPI_MODELL;
+  if (process.env.ELEVENLABS_VOICE_ID) {
+    assistent.voice = { provider: '11labs', model: 'eleven_flash_v2_5', voiceId: process.env.ELEVENLABS_VOICE_ID };
+  }
   // Lokaler Test: selbst erzeugtes Intro (Beat + Begrüßung) statt gesprochener Begrüßung, falls vorhanden.
   if (lokal && fs.existsSync(path.join(LOKAL, 'begruessung.wav'))) {
     assistent.firstMessage = `${new URL(webhook).origin}/audio/begruessung.wav`;

@@ -361,9 +361,8 @@
     "end-of-call-report"
   ],
   "voice": {
-    "provider": "11labs",
-    "model": "eleven_multilingual_v2",
-    "voiceId": "<<ELEVENLABS_VOICE_ID>>"
+    "provider": "azure",
+    "voiceId": "de-DE-SeraphinaMultilingualNeural"
   },
   "transcriber": {
     "provider": "deepgram",

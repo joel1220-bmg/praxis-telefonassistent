@@ -369,7 +369,10 @@ if (!option('--out')) {
     // Nach jedem Anruf ein Bericht an n8n (nur dieser Typ). n8n gibt daraus nur Zahlen ans Dashboard weiter.
     server,
     serverMessages: ['end-of-call-report'],
-    voice: { provider: '11labs', model: 'eleven_multilingual_v2', voiceId: '<<ELEVENLABS_VOICE_ID>>' },
+    // Muttersprachlich deutsche Stimme ohne eigenes ElevenLabs-Konto (läuft über Vapi). Die englischen
+    // ElevenLabs-Standardstimmen hatten am Telefon einen amerikanischen Akzent. Eigene ElevenLabs-Stimme:
+    // ELEVENLABS_VOICE_ID in vapi/einrichten.js (Bibliotheksstimmen brauchen einen bezahlten ElevenLabs-Plan).
+    voice: { provider: 'azure', voiceId: 'de-DE-SeraphinaMultilingualNeural' },
     // nova-3 erkennt deutsche Telefonate besser als nova-2; keyterm hebt Wörter hervor, die im Gespräch zählen
     // (z. B. wurde "privat" mit nova-2 als "Prima" erkannt).
     transcriber: {

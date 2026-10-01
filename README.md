@@ -202,8 +202,8 @@ Only set `DASHBOARD_HINTER_PROXY=1` (already set in `docker-compose.yml`) when C
 ### 5. Set up Vapi
 1. In the Vapi dashboard, create a **Bearer Token credential** with the same token as in step 3.1 and copy its ID.
 2. Buy or connect a German phone number (Vapi, Twilio, or forwarding from the practice's phone system).
-3. Pick a German voice in ElevenLabs (via Vapi) and copy its voice ID.
-4. Set the environment variables `VAPI_API_KEY`, `N8N_WEBHOOK_URL`, `VAPI_CREDENTIAL_ID`, `PRAXIS_TELEFON` and `ELEVENLABS_VOICE_ID`, then:
+3. Optional: pick a German ElevenLabs voice and copy its voice ID (without it, the German Azure voice "Seraphina" is used).
+4. Set the environment variables `VAPI_API_KEY`, `N8N_WEBHOOK_URL`, `VAPI_CREDENTIAL_ID`, `PRAXIS_TELEFON` and optionally `ELEVENLABS_VOICE_ID` (default voice: the German Azure voice Seraphina; ElevenLabs library voices need a paid ElevenLabs plan and an ElevenLabs key in Vapi), then:
 ```bash
 node vapi/einrichten.js
 ```
