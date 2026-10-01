@@ -362,7 +362,8 @@
   ],
   "voice": {
     "provider": "azure",
-    "voiceId": "de-DE-SeraphinaMultilingualNeural"
+    "voiceId": "de-DE-SeraphinaMultilingualNeural",
+    "speed": 1.15
   },
   "transcriber": {
     "provider": "deepgram",
