@@ -65,6 +65,9 @@ services:
     environment:
       N8N_RUNNERS_TASK_BROKER_URI: http://n8n:5679
       N8N_RUNNERS_AUTH_TOKEN: ${N8N_RUNNERS_AUTH_TOKEN}
+      # Runner nie wegen Leerlauf beenden (Standard: nach 15 s). Der Neustart dauerte bis zu 46 s,
+      # länger als Vapi auf ein Werkzeug wartet: Der Assistent hing dann in "Einen Moment ...".
+      N8N_RUNNERS_AUTO_SHUTDOWN_TIMEOUT: 0
 
   # Mitarbeiter-Dashboard. Benutzer anlegen: docker compose run --rm dashboard node dashboard/benutzer.js anlegen <name>
   dashboard:
