@@ -205,6 +205,25 @@ test('Buchen: Bestandspatient übernimmt Telefon und Versicherung aus früherem 
   assert.equal(neu.buchung.versicherung, 'unbekannt');
 });
 
+test('Patient prüfen zu Gesprächsbeginn: gefunden mit kommenden Terminen, nicht gefunden', () => {
+  const vorb = lib.vorbereiten(config, vapi('patient_pruefen', { vorname: 'Anna', nachname: 'Mayer', geburtsdatum: '17.05.1980' }), JETZT);
+  assert.equal(vorb.route, lib.ROUTE.finden, 'gleicher n8n-Pfad wie termine_finden');
+  assert.match(vorb.http.url, /privateExtendedProperty=gebdat%3D1980-05-17&timeMin=2024-09-28/);
+  const ev = (start, nachname, beschreibung = 'Terminart: X\nTelefon: +491701111111\nVersicherung: gesetzlich') => ({
+    id: `e${start.slice(0, 10)}`, status: 'confirmed', summary: 'Kontrolltermin: Meier, Anna', description: beschreibung,
+    start: { dateTime: start }, end: { dateTime: start },
+    extendedProperties: { private: { gebdat: '1980-05-17', nachnameCode: lib.koelnerPhonetik(nachname) } },
+  });
+  const gefunden = ergebnis(lib.nachFinden(config, vorb, { items: [ev('2026-03-01T09:00:00+01:00', 'Meier'), ev('2026-10-05T08:40:00+02:00', 'Meier')] }));
+  assert.match(gefunden, /^Gefunden: .*Kommende Termine: Montag, 5\. Oktober, 8:40 Uhr \(Kontrolltermin\)/);
+  assert.match(gefunden, /bestandspatient=true/);
+  assert.doesNotMatch(gefunden, /\+49170/, 'keine Telefonnummer im Ergebnis');
+
+  assert.match(ergebnis(lib.nachFinden(config, vorb, { items: [ev('2026-03-01T09:00:00+01:00', 'Schulz')] })), /^Nicht gefunden: .*buchstabieren/);
+  assert.match(ergebnis(lib.nachFinden(config, vorb, { items: [] })), /^Nicht gefunden/);
+  assert.match(ergebnis(lib.nachFinden(config, vorb, { error: { message: '500' } })), /Technischer Fehler/);
+});
+
 test('Finden und Absagen mit phonetischem Namensabgleich', () => {
   const eintrag = {
     id: 'evt12345', status: 'confirmed', summary: 'Kontrolltermin: Meier, Anna', start: { dateTime: '2026-10-01T09:00:00+02:00' },

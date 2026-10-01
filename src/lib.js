@@ -7,6 +7,8 @@ function makeLib(DateTime) {
     freie_termine_suchen: ROUTE.suche,
     termin_buchen: ROUTE.buchen,
     termine_finden: ROUTE.finden,
+    // Nutzt denselben n8n-Pfad wie termine_finden (ein Kalender-GET, dann nachFinden), nur mit anderer Abfrage.
+    patient_pruefen: ROUTE.finden,
     termin_absagen: ROUTE.absagen,
     rueckruf_notieren: ROUTE.rueckruf,
   };
@@ -408,6 +410,12 @@ function makeLib(DateTime) {
       return { suche, http: patientenTermineRequest(config, suche.geburtsdatum, jetzt) };
     },
 
+    // Gleich zu Gesprächsbeginn: Ist die Person aus früheren Terminen bekannt?
+    patient_pruefen(config, args, jetzt) {
+      const suche = { pruefen: true, nachname: name(args.nachname, 'Nachname'), geburtsdatum: geburtsdatum(args.geburtsdatum, jetzt) };
+      return { suche, http: patientenHistorieRequest(config, suche.geburtsdatum, jetzt) };
+    },
+
     termin_absagen(config, args, jetzt) {
       const id = text(args.termin_id, 1024);
       if (!/^[A-Za-z0-9_\-]{5,1024}$/.test(id)) {
@@ -563,7 +571,32 @@ function makeLib(DateTime) {
       + (tel ? ` Sag dazu, dass die Praxis für Rückfragen die hinterlegte Nummer mit der Endung ${tel.slice(-2).split('').join(' ')} nutzt.` : ''));
   }
 
+  function nachPatientPruefen(config, vorb, historieAntwort) {
+    let historie;
+    try {
+      historie = patientHistorie(config, historieAntwort, vorb.suche.nachname);
+    } catch (e) {
+      return antwort(vorb.toolCallId, 'Technischer Fehler beim Kalender. Frag ganz normal weiter; beim Buchen mit bestandspatient=false Versicherung und Rückrufnummer erfragen.');
+    }
+    const jetzt = zeit(config, vorb.jetzt);
+    if (!historie.length || !stammdaten(historie)) {
+      return antwort(vorb.toolCallId,
+        'Nicht gefunden: Zu diesem Nachnamen und Geburtsdatum gibt es keine Patientendaten. Lass den Nachnamen buchstabieren und das '
+        + 'Geburtsdatum bestätigen, dann patient_pruefen erneut aufrufen. Bleibt es dabei, behandle die Person als neu '
+        + '(Erstgespräch, beim Buchen Versicherung und Rückrufnummer erfragen, bestandspatient=false).');
+    }
+    const kommend = historie.filter((t) => t.ende > jetzt).sort((a, b) => a.start - b.start);
+    const termine = kommend.length
+      ? ` Kommende Termine: ${kommend.map((t) => `${sprechZeit(t.start)} (${t.summary.split(':')[0]})`).join('; ')}.`
+      : ' Keine kommenden Termine.';
+    return antwort(vorb.toolCallId,
+      `Gefunden: bekannte Patientin bzw. bekannter Patient, Kontaktdaten und Versicherung sind hinterlegt.${termine} `
+      + 'Begrüße die Person mit Nachnamen, frag dann nach dem Anliegen. Frag nicht nach Telefonnummer oder Versicherung; '
+      + 'beim Buchen bestandspatient=true und die bestätigten Personendaten verwenden.');
+  }
+
   function nachFinden(config, vorb, listeAntwort) {
+    if (vorb.suche && vorb.suche.pruefen) return nachPatientPruefen(config, vorb, listeAntwort);
     let termine;
     try {
       termine = patientTermine(config, listeAntwort, vorb.suche.nachname);

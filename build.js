@@ -333,6 +333,11 @@ if (!option('--out')) {
           versicherung: s('string', 'Nur bei neuen Personen: Versicherungsart.', { enum: ['gesetzlich', 'privat', 'selbstzahler', 'unbekannt'] }),
           anliegen: s('string', 'Anliegen in wenigen Worten, keine Details.'),
         }, ['terminart', 'start', 'vorname', 'nachname', 'geburtsdatum', 'bestandspatient'], 'Einen Moment, ich trage den Termin ein.'),
+        tool('patient_pruefen', 'Prüft gleich zu Gesprächsbeginn, ob eine Person, die schon in der Praxis war, mit Nachname und Geburtsdatum bekannt ist.', {
+          vorname: personParams.vorname,
+          nachname: personParams.nachname,
+          geburtsdatum: personParams.geburtsdatum,
+        }, ['nachname', 'geburtsdatum'], 'Einen Moment, ich schaue nach.'),
         tool('termine_finden', 'Findet zukünftige Termine einer Person (nur über den Telefonassistenten gebuchte).', {
           nachname: personParams.nachname,
           geburtsdatum: personParams.geburtsdatum,
