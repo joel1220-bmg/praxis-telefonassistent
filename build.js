@@ -316,6 +316,9 @@ if (!option('--out')) {
     model: {
       provider: 'anthropic',
       model: 'claude-sonnet-5', // von Vapi unterstützt (Stand 09/2026); claude-opus-5 bietet Vapi noch nicht an
+      // Vapi begrenzt Antworten sonst auf 250 Tokens. Eine gesprochene Zusammenfassung plus termin_buchen passte
+      // nicht hinein: Die Antwort wurde abgeschnitten (finish_reason "length") und das Werkzeug kam mit {} an.
+      maxTokens: 1500,
       messages: [{ role: 'system', content: prompt }],
       tools: [
         tool('freie_termine_suchen', 'Sucht freie Termine im Praxiskalender. Immer vor dem Buchen aufrufen.', {

@@ -170,6 +170,15 @@ test('Buchen: Schleifenschutz bei leeren Argumenten und wiederholten Fehlern', (
   const zweimal = lib.vorbereiten(config, vapi('termin_buchen', buchungsArgs, verlauf(2)), JETZT);
   assert.equal(zweimal.route, lib.ROUTE.direkt);
   assert.match(ergebnis(zweimal.antwort), /^STOPP.*rueckruf_notieren/);
+
+  // Gilt für jedes Werkzeug (im Testanruf hing rueckruf_notieren achtmal mit leeren Argumenten).
+  const rueckrufFehler = { artifact: { messages: [
+    { role: 'tool_call_result', name: 'rueckruf_notieren', result: 'Fehler: anliegen fehlt.' },
+    { role: 'tool_call_result', name: 'rueckruf_notieren', result: 'Fehler: anliegen fehlt.' },
+  ] } };
+  const rueckruf = lib.vorbereiten(config, vapi('rueckruf_notieren', {}, rueckrufFehler), JETZT);
+  assert.equal(rueckruf.route, lib.ROUTE.direkt);
+  assert.match(ergebnis(rueckruf.antwort), /^STOPP: rueckruf_notieren .*Sprechzeiten.*Verabschiede/);
 });
 
 test('Buchen: Bestandspatient übernimmt Telefon und Versicherung aus früherem Termin', () => {

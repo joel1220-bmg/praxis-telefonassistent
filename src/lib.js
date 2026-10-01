@@ -294,10 +294,10 @@ function makeLib(DateTime) {
 
   const MAX_FEHLVERSUCHE = 2;
 
-  // Zählt Werkzeug-Ergebnisse "Fehler: ..." für dieses Werkzeug im bisherigen Gesprächsverlauf.
+  // Zählt Werkzeug-Ergebnisse "Fehler: ..." und "STOPP: ..." für dieses Werkzeug im bisherigen Gesprächsverlauf.
   function fehlversuche(nachricht, tool) {
     const verlauf = ((nachricht.artifact || {}).messages) || [];
-    return verlauf.filter((m) => m && m.role === 'tool_call_result' && m.name === tool && /^Fehler/.test(String(m.result || ''))).length;
+    return verlauf.filter((m) => m && m.role === 'tool_call_result' && m.name === tool && /^(Fehler|STOPP)/.test(String(m.result || ''))).length;
   }
 
   function argumenteLesen(roh) {
@@ -331,13 +331,16 @@ function makeLib(DateTime) {
     if (!(tool in TOOL_ROUTE)) {
       return { ...basis, route: ROUTE.direkt, antwort: antwort(toolCallId, `Unbekanntes Werkzeug: ${text(tool, 60)}`) };
     }
-    // Schleifenschutz: Nach zwei gescheiterten Buchungsversuchen im selben Gespräch nicht weiter probieren lassen,
-    // sondern auf einen Rückruf umlenken. Vapi schickt den bisherigen Verlauf in message.artifact.messages mit.
-    if (tool === 'termin_buchen' && fehlversuche(nachricht, tool) >= MAX_FEHLVERSUCHE) {
+    // Schleifenschutz für jedes Werkzeug: Nach zwei gescheiterten Aufrufen im selben Gespräch nicht weiter probieren
+    // lassen. Vapi schickt den bisherigen Verlauf in message.artifact.messages mit.
+    if (fehlversuche(nachricht, tool) >= MAX_FEHLVERSUCHE) {
+      const weiter = tool === 'termin_buchen'
+        ? 'Entschuldige dich kurz, ohne Technisches zu nennen, und nimm mit rueckruf_notieren einen Rückrufwunsch auf '
+          + '(kategorie termin, Anliegen: gewünschter Termin mit Tag und Uhrzeit). Während der Sprechzeiten kannst du stattdessen weiterverbinden.'
+        : 'Entschuldige dich kurz, ohne Technisches zu nennen, sag, dass das gerade leider nicht klappt, und bitte den Anrufer, '
+          + 'sich während der Sprechzeiten noch einmal zu melden. Verabschiede dich dann freundlich.';
       return { ...basis, route: ROUTE.direkt, antwort: antwort(toolCallId,
-        'STOPP: Die Buchung ist in diesem Gespräch mehrfach gescheitert. Rufe termin_buchen nicht noch einmal auf. '
-        + 'Entschuldige dich kurz, ohne Technisches zu nennen, und nimm mit rueckruf_notieren einen Rückrufwunsch auf '
-        + '(kategorie termin, Anliegen: gewünschter Termin mit Tag und Uhrzeit). Während der Sprechzeiten kannst du stattdessen weiterverbinden.') };
+        `STOPP: ${tool} ist in diesem Gespräch mehrfach gescheitert. Rufe ${tool} nicht noch einmal auf. ${weiter}`) };
     }
     try {
       return { ...basis, route: TOOL_ROUTE[tool], ...VORBEREITUNG[tool](config, args, jetzt, anrufer) };
