@@ -186,6 +186,8 @@ table.heat td { height: 24px; border-radius: 4px; padding: 0; }
 .raster .karte h3 { margin: 0 0 8px; font-size: 1rem; }
 table { width: 100%; border-collapse: collapse; }
 td, th { text-align: left; padding: 4px 0; vertical-align: top; }
+/* Lange deutsche Wörter (z. B. "Gesundheitsuntersuchung") umbrechen statt aus der Karte zu ragen. */
+.raster td, .raster th { overflow-wrap: anywhere; hyphens: auto; }
 th { font-weight: 500; color: var(--leise); padding-right: 12px; }
 ul.einfach { margin: 0; padding-left: 18px; }
 .pruef { display: flex; gap: 8px; align-items: flex-start; padding: 3px 0; }
